@@ -2340,9 +2340,20 @@ class QuickboxWindow(QMainWindow):
         dlg = QDialog(self)
         dlg.setWindowTitle("Help — Quickbox")
         dlg.setWindowIcon(QIcon.fromTheme("qemu"))
-        dlg.resize(380, 420)
-        v = QVBoxLayout(dlg)
-        v.setSpacing(8)
+        dlg.resize(400, 480)
+        outer = QVBoxLayout(dlg)
+        outer.setSpacing(8)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        content = QWidget()
+        v = QVBoxLayout(content)
+        v.setSpacing(10)
+        v.setContentsMargins(4, 4, 4, 4)
+        scroll.setWidget(content)
+        outer.addWidget(scroll, 1)
 
         # ── keyboard shortcuts ──
         shortcuts_lbl = QLabel("Keyboard shortcuts")
@@ -2397,13 +2408,12 @@ class QuickboxWindow(QMainWindow):
         about.setOpenExternalLinks(True)
         about.setWordWrap(True)
         v.addWidget(about)
-
         v.addStretch()
 
         close_btn = QPushButton(S["btn_close"])
         close_btn.clicked.connect(dlg.close)
         close_btn.setDefault(True)
-        v.addWidget(close_btn)
+        outer.addWidget(close_btn)
         dlg.exec()
 
     # ── helpers ───────────────────────────────────────────────────────────────────
