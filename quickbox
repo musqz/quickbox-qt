@@ -766,6 +766,7 @@ class QuickboxWindow(QMainWindow):
         self._any_importing = False
         self._conf_mtimes   = {}
         self._vms_dir_mtime = 0
+        self._active_workers = set()
 
         # Clean stale copy flags
         for f in Path(self.vms_dir).glob(".*.copying"):
@@ -1030,6 +1031,10 @@ class QuickboxWindow(QMainWindow):
         if event.key() == Qt.Key.Key_F5 or (event.modifiers() & Qt.KeyboardModifier.ControlModifier and event.key() == Qt.Key.Key_R):
             self._refresh()
         super().keyPressEvent(event)
+
+    def _track_worker(self, worker):
+        self._active_workers.add(worker)
+        worker.finished.connect(lambda: self._active_workers.discard(worker))
 
     # ── detail panel ─────────────────────────────────────────────────────────────
     def _show_panel(self, vm):
@@ -1363,6 +1368,7 @@ class QuickboxWindow(QMainWindow):
             return
         worker = SnapWorker("create", vm["_disk"], tag)
         worker.done.connect(lambda ok, err, v=vm, t=tag: self._on_snap_done(ok, err, "create", v, t))
+        self._track_worker(worker)
         worker.start()
 
     def _snap_delete(self, vm, tag):
@@ -1373,6 +1379,7 @@ class QuickboxWindow(QMainWindow):
             notify("quickbox", S["ntf_snap_applied"].format(tag)) if ok else
             self._warn(S["warn_snap_fail_t"], err),
             self._show_panel(v)))
+        self._track_worker(worker)
         worker.start()
 
     def _snap_apply(self, vm, tag):
@@ -1518,6 +1525,7 @@ class QuickboxWindow(QMainWindow):
             notify("quickbox", S["ntf_clone_done"].format(dest_name)) if ok
             else self._warn(S["warn_clone_t"], S["warn_clone_dir"].format(err)),
             self._refresh()))
+        self._track_worker(worker)
         worker.start()
 
     # ── delete / format ───────────────────────────────────────────────────────────
@@ -1603,6 +1611,7 @@ class QuickboxWindow(QMainWindow):
             notify("quickbox", S["ntf_fmt_done"].format(layout, size_gb)) if ok
             else self._warn(S["warn_fmt_fail_t"], S["warn_fmt_fail_b"].format(err)),
             self._refresh()))
+        self._track_worker(worker)
         worker.start()
 
     # ── profile changed ───────────────────────────────────────────────────────────
@@ -1911,6 +1920,7 @@ class QuickboxWindow(QMainWindow):
                 notify("quickbox", f"VM {vm_name} created!") if ok
                 else self._warn("Conversion failed", err),
                 self._refresh()))
+            self._track_worker(worker)
             worker.start()
         else:
             dest_iso = dest_dir / src_path.name
@@ -1926,6 +1936,7 @@ class QuickboxWindow(QMainWindow):
                 notify("quickbox", f"VM {vm_name} created!") if ok
                 else self._warn("Copy failed", err),
                 self._refresh()))
+            self._track_worker(worker)
             worker.start()
 
     # ── advanced ──────────────────────────────────────────────────────────────────
@@ -1996,6 +2007,7 @@ class QuickboxWindow(QMainWindow):
                 upd_btn.setText(S["adv_update_dl"])
                 notify("Quickbox", msg, "low" if ok else "critical")
             worker.done.connect(_on_done)
+            self._track_worker(worker)
             worker.start()
         upd_btn.clicked.connect(_update_distros)
         cv.addWidget(upd_btn)
