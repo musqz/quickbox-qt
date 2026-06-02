@@ -1735,8 +1735,7 @@ class QuickboxWindow(QMainWindow):
             btn.setFlat(True)
             btn.setFixedSize(34, 26)
             def _jump(_, ltr=letter, lrows=letter_rows, dl=dist_list):
-                row = dl.row(lrows[ltr])
-                dl.scrollToItem(lrows[ltr])
+                dl.scrollToItem(lrows[ltr], QAbstractItemView.ScrollHint.PositionAtTop)
             btn.clicked.connect(_jump)
             alpha_v.addWidget(btn)
         alpha_v.addStretch()
