@@ -1321,25 +1321,29 @@ class QuickboxWindow(QMainWindow):
 
         dng_w = QWidget()
         dv = QVBoxLayout(dng_w)
-        dv.setContentsMargins(0, 4, 0, 0)
-        dv.setSpacing(4)
+        dv.setContentsMargins(0, 4, 0, 4)
+        dv.setSpacing(6)
 
-        dng_row = QWidget()
-        dr = QHBoxLayout(dng_row)
-        dr.setContentsMargins(0, 0, 0, 0)
-        for lbl_key, tt_key, cb in [
+        for lbl_key, note_key, cb in [
             ("dng_del_disk", "tt_del_disk", lambda: self._delete_disk(vm)),
             ("dng_fmt_disk", "tt_fmt_disk", lambda: self._dlg_format_disk(vm)),
             ("dng_del_vm",   "tt_del_vm",   lambda: self._delete_vm(vm)),
         ]:
+            row = QWidget()
+            rl  = QHBoxLayout(row)
+            rl.setContentsMargins(0, 0, 0, 0)
+            rl.setSpacing(10)
             btn = QPushButton(S[lbl_key])
-            btn.setToolTip(S[tt_key])
+            btn.setFixedWidth(130)
             btn.setEnabled(not read_only)
             btn.setStyleSheet("color:#c62828; font-weight:bold;")
             btn.clicked.connect(cb)
-            dr.addWidget(btn)
-        dr.addStretch()
-        dv.addWidget(dng_row)
+            note = QLabel(S[note_key])
+            note.setStyleSheet("font-size:11px;")
+            note.setWordWrap(True)
+            rl.addWidget(btn)
+            rl.addWidget(note, 1)
+            dv.addWidget(row)
 
         dng_hdr.add_content(dng_w)
         self._right_layout.addWidget(dng_w)
