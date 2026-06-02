@@ -44,7 +44,6 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import (
     Qt, QTimer, QThread, Signal, QSocketNotifier, QSize, QMetaObject,
-    Q_ARG,
 )
 from PySide6.QtGui import QIcon, QPixmap, QFont, QCursor, QColor, QKeySequence, QAction
 
@@ -759,8 +758,15 @@ class SectionHeader(QWidget):
 
 # ── main window ────────────────────────────────────────────────────────────────
 class QuickboxWindow(QMainWindow):
+    _sig_refresh_panel       = Signal(object)
+    _sig_ask_delete_originals = Signal(object, str)
+    _sig_migration_failed    = Signal()
+
     def __init__(self):
         super().__init__()
+        self._sig_refresh_panel.connect(self._refresh_panel)
+        self._sig_ask_delete_originals.connect(self._ask_delete_originals)
+        self._sig_migration_failed.connect(self._warn_migration_failed)
         self.conf        = read_conf()
         self.vms_dir     = self.conf.get("vms_dir", str(Path.home() / "emu"))
         self.vms         = []
@@ -1444,8 +1450,7 @@ class QuickboxWindow(QMainWindow):
                 setconf("snap_dirty", "false", vm["_conf"])
                 vm["current_snap"] = tag
                 notify("quickbox", S["ntf_snap_applied"].format(tag))
-            QMetaObject.invokeMethod(self, "_refresh_panel", Qt.ConnectionType.QueuedConnection,
-                                     Q_ARG(object, vm))
+            self._sig_refresh_panel.emit(vm)
 
         threading.Thread(target=_do_apply, daemon=True).start()
 
@@ -2201,13 +2206,9 @@ class QuickboxWindow(QMainWindow):
                     ok = False
             QMetaObject.invokeMethod(prog, "close", Qt.ConnectionType.QueuedConnection)
             if ok:
-                QMetaObject.invokeMethod(self, "_ask_delete_originals",
-                                         Qt.ConnectionType.QueuedConnection,
-                                         Q_ARG(object, selected),
-                                         Q_ARG(str, dest[0]))
+                self._sig_ask_delete_originals.emit(selected, dest[0])
             else:
-                QMetaObject.invokeMethod(self, "_warn_migration_failed",
-                                         Qt.ConnectionType.QueuedConnection)
+                self._sig_migration_failed.emit()
 
         threading.Thread(target=_do_migrate, daemon=True).start()
 
