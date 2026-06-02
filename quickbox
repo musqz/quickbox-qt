@@ -158,6 +158,10 @@ S = {
     "mig_title": "Select VMs to migrate",
     "mig_hint": "Tick the VMs you want to copy to the new location.",
     "mig_all": "Select all", "mig_none": "Select none",
+    "mig_running_tag": "  [running]",
+    "mig_stop_tt": "Stop the VM before migrating",
+    "mig_no_dest": "No destination selected",
+    "btn_pick_dest": "Select destination…",
     "prog_wait": "Please wait…", "prog_done": "Done!", "prog_fail": "Failed.",
     "distro_updating": "Updating distro list...",
     "ntf_launching": "Launching {}",
@@ -181,9 +185,9 @@ S = {
     "dlg_fmt_t": "Format disk?",
     "dlg_fmt_b": "This will create a new {}GB disk with layout: {}\n\nAll existing data will be lost.",
     "dlg_migrate_t": "Start migration?",
-    "dlg_migrate_b": "Copy {} VM(s) to:\n{}\n\nOriginals will remain unless you confirm removal afterwards.",
+    "dlg_migrate_b": "Copy {} VM(s) to:\n{}\n{}\n\nOriginals will remain unless you confirm removal afterwards.",
     "dlg_danger_t": "Remove original files?",
-    "dlg_danger_b": "Migration succeeded.\n\nPermanently DELETE the {} migrated VM(s) from {}?\n\nThis cannot be undone.",
+    "dlg_danger_b": "Migration succeeded.\n\nPermanently DELETE the {} migrated VM(s) from:\n{}\n{}\n\nThis cannot be undone.",
     "btn_confirm_yes": "Yes", "btn_confirm_no": "Cancel",
     "btn_keep": "No, keep files", "btn_delete_orig": "Yes, delete originals",
     "warn_exists_t": "Already exists", "warn_exists_b": "VM '{}' already exists.",
@@ -2150,33 +2154,57 @@ class QuickboxWindow(QMainWindow):
         if not self.vms:
             self._warn(S["warn_no_vms_t"], S["warn_no_vms_b"])
             return
+
         dlg = QDialog(self)
         dlg.setWindowTitle(S["mig_title"])
         dlg.setWindowIcon(QIcon.fromTheme("qemu"))
-        dlg.resize(480, 400)
+        dlg.resize(480, 460)
         v = QVBoxLayout(dlg)
+        v.setSpacing(8)
+
         v.addWidget(QLabel(S["mig_hint"]))
 
-        all_btn = QPushButton(S["mig_all"])
-        none_btn = QPushButton(S["mig_none"])
         hr = QHBoxLayout()
+        all_btn  = QPushButton(S["mig_all"])
+        none_btn = QPushButton(S["mig_none"])
         hr.addWidget(all_btn); hr.addWidget(none_btn); hr.addStretch()
         v.addLayout(hr)
 
+        # scrollable VM list
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        list_w = QWidget()
+        list_v = QVBoxLayout(list_w)
+        list_v.setSpacing(3)
+        list_v.setContentsMargins(4, 4, 4, 4)
+        scroll.setWidget(list_w)
+        v.addWidget(scroll, 1)
+
         checks = []
         for vm in self.vms:
-            cb = QCheckBox(vm["_pretty"])
+            running = vm["_running"]
+            tag  = S["mig_running_tag"] if running else ""
+            cb   = QCheckBox(f"{vm['_pretty']}  ({vm['_size']}){tag}")
             cb.setProperty("vm", vm)
+            cb.setEnabled(not running)
+            if running:
+                cb.setToolTip(S["mig_stop_tt"])
             checks.append(cb)
-            v.addWidget(cb)
+            list_v.addWidget(cb)
+        list_v.addStretch()
 
-        all_btn.clicked.connect(lambda: [c.setChecked(True) for c in checks])
+        all_btn.clicked.connect(lambda: [c.setChecked(True)  for c in checks if c.isEnabled()])
         none_btn.clicked.connect(lambda: [c.setChecked(False) for c in checks])
 
+        # destination picker
+        dest_row = QHBoxLayout()
         pick_btn = QPushButton(S["btn_pick_dest"])
-        v.addWidget(pick_btn)
-        dest_lbl = QLabel("")
-        v.addWidget(dest_lbl)
+        dest_lbl = QLabel(S["mig_no_dest"])
+        dest_lbl.setStyleSheet("font-size:11px;")
+        dest_row.addWidget(pick_btn)
+        dest_row.addWidget(dest_lbl, 1)
+        v.addLayout(dest_row)
         dest = [None]
 
         def _pick():
@@ -2201,40 +2229,51 @@ class QuickboxWindow(QMainWindow):
         if not selected:
             return
 
+        names = "\n  • " + "\n  • ".join(v["_pretty"] for v in selected)
         if not self._confirm(S["dlg_migrate_t"],
-                             S["dlg_migrate_b"].format(len(selected), dest[0])):
+                             S["dlg_migrate_b"].format(len(selected), dest[0], names)):
             return
 
         prog = self._progress_dialog(S["mig_title"])
 
         def _do_migrate():
+            dest_dir = dest[0]
+            Path(dest_dir).mkdir(parents=True, exist_ok=True)
+            # one rsync call per VM (dir + conf)
             ok = True
             for vm in selected:
-                src = Path(self.vms_dir) / vm["_name"]
-                dst = Path(dest[0]) / vm["_name"]
-                dst_conf = Path(dest[0]) / f"{vm['_name']}.conf"
-                try:
-                    shutil.copytree(str(src), str(dst))
-                    shutil.copy2(vm["_conf"], str(dst_conf))
-                except Exception:
+                vm_dir = Path(self.vms_dir) / vm["_name"]
+                if vm_dir.exists():
+                    r = subprocess.run(
+                        ["rsync", "-a", f"{vm_dir}/",
+                         f"{dest_dir}/{vm['_name']}/"],
+                        capture_output=True)
+                    if r.returncode != 0:
+                        ok = False
+                r2 = subprocess.run(
+                    ["rsync", "-a", vm["_conf"], f"{dest_dir}/"],
+                    capture_output=True)
+                if r2.returncode != 0:
                     ok = False
             QMetaObject.invokeMethod(prog, "close", Qt.ConnectionType.QueuedConnection)
             if ok:
-                self._sig_ask_delete_originals.emit(selected, dest[0])
+                self._sig_ask_delete_originals.emit(selected, dest_dir)
             else:
                 self._sig_migration_failed.emit()
 
         threading.Thread(target=_do_migrate, daemon=True).start()
 
     def _ask_delete_originals(self, selected, dest):
+        names = "\n  • " + "\n  • ".join(v["_pretty"] for v in selected)
         r = QMessageBox.question(self, S["dlg_danger_t"],
-            S["dlg_danger_b"].format(len(selected), self.vms_dir),
+            S["dlg_danger_b"].format(len(selected), self.vms_dir, names),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if r == QMessageBox.StandardButton.Yes:
             for vm in selected:
                 shutil.rmtree(str(Path(self.vms_dir) / vm["_name"]), ignore_errors=True)
                 Path(vm["_conf"]).unlink(missing_ok=True)
         self._refresh()
+        self._show_welcome()
 
     def _warn_migration_failed(self):
         self._warn(S["warn_mig_fail_t"], S["warn_mig_fail_b"])
