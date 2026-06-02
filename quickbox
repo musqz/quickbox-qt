@@ -265,7 +265,7 @@ def read_vm_conf(path):
 # ── VM helpers ─────────────────────────────────────────────────────────────────
 def is_running(vmname):
     try:
-        r = subprocess.run(["pgrep", "-f", f"quickemu.*{vmname}"],
+        r = subprocess.run(["pgrep", "-f", f"name {vmname},process={vmname}"],
                            capture_output=True, text=True)
         return bool(r.stdout.strip())
     except Exception:
@@ -1080,10 +1080,8 @@ class QuickboxWindow(QMainWindow):
             lbl.setTextFormat(Qt.TextFormat.RichText)
             lb.addWidget(lbl)
         elif vm["_running"]:
-            lbl = QLabel(f"<span style='color:#4caf50;font-weight:bold'>{S['vm_running']}</span>")
-            lbl.setTextFormat(Qt.TextFormat.RichText)
-            lb.addWidget(lbl)
             stop_btn = QPushButton(S["btn_stop"])
+            stop_btn.setStyleSheet("background:#b71c1c;color:white;border-radius:6px;padding:6px 16px;font-weight:bold;font-size:13px;")
             stop_btn.clicked.connect(lambda: self._stop_vm(vm))
             lb.addWidget(stop_btn)
         else:
@@ -1361,10 +1359,10 @@ class QuickboxWindow(QMainWindow):
 
     def _stop_vm(self, vm):
         try:
-            subprocess.run(["pkill", "-f", f"quickemu.*{vm['_name']}"])
+            subprocess.run(["pkill", "-TERM", "-f", f"name {vm['_name']},process={vm['_name']}"])
         except Exception:
             pass
-        QTimer.singleShot(1500, self._refresh)
+        QTimer.singleShot(2000, self._refresh)
 
     # ── snapshots ─────────────────────────────────────────────────────────────────
     def _snap_create(self, vm):
