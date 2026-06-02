@@ -1,0 +1,2227 @@
+#!/usr/bin/env python3
+# Quickbox — Qt6 GUI for quickemu
+# MIT License - Copyright (c) 2026 Musqz
+
+import sys, os, socket, subprocess, threading, glob, shutil, datetime, html
+from pathlib import Path
+
+import gi  # noqa — only needed for version check guard below
+
+# ── single-instance lock ───────────────────────────────────────────────────────
+SOCKET_PATH = Path.home() / ".config/quickbox/quickbox-qt.sock"
+
+def _acquire_lock():
+    SOCKET_PATH.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        c = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        c.connect(str(SOCKET_PATH))
+        c.sendall(b"activate\n")
+        c.close()
+        sys.exit(0)
+    except (ConnectionRefusedError, FileNotFoundError):
+        pass
+    try:
+        SOCKET_PATH.unlink()
+    except FileNotFoundError:
+        pass
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.bind(str(SOCKET_PATH))
+    sock.listen(1)
+    import atexit
+    atexit.register(lambda: SOCKET_PATH.unlink(missing_ok=True))
+    return sock
+
+_lock_socket = _acquire_lock()
+
+# ── Qt6 imports ────────────────────────────────────────────────────────────────
+from PySide6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+    QSplitter, QListWidget, QListWidgetItem, QScrollArea, QLabel, QPushButton,
+    QLineEdit, QComboBox, QCheckBox, QSpinBox, QProgressBar, QFrame,
+    QToolBar, QStatusBar, QDialog, QDialogButtonBox, QFileDialog,
+    QSystemTrayIcon, QMenu, QMessageBox, QSizePolicy, QAbstractItemView,
+    QTextEdit, QRadioButton, QButtonGroup,
+)
+from PySide6.QtCore import (
+    Qt, QTimer, QThread, Signal, QSocketNotifier, QSize, QMetaObject,
+    Q_ARG,
+)
+from PySide6.QtGui import QIcon, QPixmap, QFont, QCursor, QColor, QKeySequence, QAction
+
+# ── paths & config ─────────────────────────────────────────────────────────────
+CONFIG_FILE  = Path.home() / ".config/quickbox/quickbox.conf"
+PROFILES_DIR = Path.home() / ".config/quickbox/profiles"
+CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+VERSION = "1.2.3"
+
+# ── i18n ───────────────────────────────────────────────────────────────────────
+import locale as _locale, json as _json
+_lang = (_locale.getlocale()[0] or "en")[:2]
+
+S = {
+    "app_title": "Quickbox",
+    "hdr_download": "Download", "hdr_custom_vm": "Custom VM",
+    "hdr_advanced": "Advanced", "hdr_tray": "Tray",
+    "tt_download": "Download a new distro ISO via quickget",
+    "tt_custom_vm": "Create a VM from a local ISO or IMG file",
+    "tt_advanced": "Migrate VMs, switch location, manage saved paths",
+    "tt_tray": "Enable system tray icon",
+    "search_ph": "Filter VMs…",
+    "badge_running": "running",
+    "status_vms": "{} VM", "status_vms_pl": "{} VMs",
+    "welcome": "Select a VM from the list",
+    "sec_launch": "LAUNCH", "sec_info": "INFO",
+    "sec_settings": "SETTINGS", "sec_snapshots": "SNAPSHOTS",
+    "sec_actions": "ACTIONS | DANGER ZONE",
+    "vm_copying": "⏳ Importing…",
+    "vm_running": "VM is running",
+    "btn_stop": "Stop VM", "btn_launch": "Launch VM",
+    "btn_hide": "Hide", "btn_show": "Show",
+    "btn_cancel": "Cancel", "btn_close": "Close",
+    "btn_clone": "Clone", "btn_next": "Next",
+    "btn_download": "Download", "dl2_done_close": "Done — Close",
+    "info_guest_os": "Guest OS", "info_boot_mode": "Boot mode",
+    "info_ssh_port": "SSH port", "info_disk": "Disk", "info_iso": "ISO",
+    "set_profile": "Profile:", "set_compat": "Compatibility mode:",
+    "set_boot": "Boot mode:", "set_quiet": "Quiet launch:",
+    "set_quiet_note": "No launch notification",
+    "set_compat_hint": "Use minimal QEMU without VirGL — for lightweight or older distros.",
+    "boot_uefi": "UEFI", "boot_legacy": "Legacy (BIOS)",
+    "snap_no_disk": "No disk yet — launch VM first to create one",
+    "snap_none": "No snapshots yet",
+    "snap_entry_ph": "New snapshot tag…",
+    "snap_create": "Create snapshot",
+    "snap_apply": "Apply", "snap_delete": "Delete",
+    "snap_active": "Active: {}",
+    "snap_autosave_chk": "Save current state first as:",
+    "snap_autosave_skip": "Disk already at this snapshot — no backup needed",
+    "snap_autosave_done": "Current state saved as '{}'",
+    "act_edit_conf": "Edit conf", "act_clone": "Clone VM",
+    "act_open_dir": "Open dir",
+    "tt_edit_conf": "Open the VM configuration file in a text editor",
+    "tt_clone": "Create a full copy of this VM with a new name",
+    "tt_open_dir": "Open the VM directory in the file manager",
+    "dng_del_disk": "Delete disk", "dng_fmt_disk": "Format disk",
+    "dng_del_vm": "Delete VM",
+    "tt_del_disk": "Remove the disk image only — keeps ISO and config",
+    "tt_fmt_disk": "Create or re-format the disk — erases all data",
+    "tt_del_vm": "Permanently remove all VM files including disk and config",
+    "clone_title": "Clone VM", "clone_label": "Clone '{}' as:",
+    "clone_tt": "Name for the cloned VM",
+    "clone_hint": "The clone will appear in the VM list as a separate VM.",
+    "fmt_title": "Format disk", "fmt_warn": "⚠ This will ERASE all data on the disk!",
+    "fmt_size_lbl": "Disk size (GB):", "fmt_layout_lbl": "Partition layout:",
+    "fmt_layout_gpt": "GPT — 512MB FAT32 ESP + ext4 (rest)",
+    "fmt_layout_msd": "MSDOS — ext4 (whole disk)",
+    "fmt_layout_fat": "MSDOS — FAT32 (whole disk)",
+    "fmt_layout_raw": "Blank — no partitions (raw qcow2)",
+    "btn_format": "Format",
+    "dl_title": "Download Distro",
+    "dl_search_ph": "Search distros…",
+    "dl_hint2": "Click a distro to select version and download",
+    "dl2_ver_lbl": "Version / edition:",
+    "dl2_cmd_lbl": "Command:",
+    "dl2_ready": "Ready to download",
+    "dl2_starting": "Starting download…",
+    "dl2_progress": "Downloading… {} MB  ({} MB/s)",
+    "dl2_verifying": "Verifying…",
+    "dl2_done": "Download complete!",
+    "dl2_failed": "Download failed.",
+    "dl2_cancelled": "Cancelled",
+    "dl2_connecting": "Connecting… ({}s)",
+    "dl2_unreachable": "Server unreachable — edit command or check VPN, then retry",
+    "dl2_note": "Download time varies depending on ISO size and server speed.",
+    "dl2_search_ph": "Search distros…",
+    "cvm_title": "Create Custom VM",
+    "cvm_name_lbl": "Enter a name for the new VM:",
+    "cvm_name_def": "My custom VM",
+    "cvm_file_title": "Select ISO or IMG file",
+    "cvm_filter": "Disk images (*.iso *.img)",
+    "adv_title": "Advanced",
+    "adv_cur_dir": "Current VMs directory:",
+    "adv_sec_loc": "LOCATION MANAGEMENT",
+    "adv_sec_distro": "DISTRO LIST MANAGEMENT",
+    "adv_sec_prof": "PROFILES MANAGEMENT",
+    "adv_sec_saved": "SAVED LOCATIONS (click to switch)",
+    "adv_migrate": "Migrate VMs to new location",
+    "adv_add_loc": "Add to switch list",
+    "adv_update_dl": "Update Distro List from quickget",
+    "adv_update_hint": "Updates ~/.config/quickbox/quickinst.csv (takes ~30s)",
+    "adv_open_prof": "Open profiles folder",
+    "adv_reset_prof": "Reset default profiles",
+    "adv_prof_hint": "Add or edit .conf files in {} to create custom profiles.",
+    "adv_no_locs": "No saved locations yet",
+    "tt_reset_prof": "Restore the 5 built-in profiles.",
+    "btn_switch": "Switch", "btn_remove": "Remove",
+    "btn_open_loc": "Open",
+    "mig_title": "Select VMs to migrate",
+    "mig_hint": "Tick the VMs you want to copy to the new location.",
+    "mig_all": "Select all", "mig_none": "Select none",
+    "prog_wait": "Please wait…", "prog_done": "Done!", "prog_fail": "Failed.",
+    "distro_updating": "Updating distro list...",
+    "ntf_launching": "Launching {}",
+    "ntf_snap_created": "Snapshot '{}' created.",
+    "ntf_snap_applied": "Snapshot '{}' applied.",
+    "ntf_clone_done": "Clone complete: '{}' — ready to use",
+    "ntf_fmt_start": "Formatting {}GB disk…",
+    "ntf_fmt_done": "Disk ready: {}, {}GB",
+    "ntf_converting": "Converting {} to qcow2…",
+    "ntf_copying": "Copying {}…",
+    "ntf_vm_created": "VM <b>{}</b> created!",
+    "ntf_prof_reset": "Default profiles restored.",
+    "dlg_del_disk_t": "Delete disk image?",
+    "dlg_del_disk_b": "Removes disk for '{}'. ISO stays.",
+    "dlg_del_vm_t": "Delete VM '{}' completely?",
+    "dlg_del_vm_b": "All files removed. Cannot be undone.",
+    "dlg_snap_apply_t": "Apply snapshot '{}'?",
+    "dlg_snap_apply_b": "The disk will be permanently rolled back.",
+    "dlg_snap_del_t": "Delete snapshot '{}'?",
+    "dlg_snap_del_b": "This cannot be undone.",
+    "dlg_fmt_t": "Format disk?",
+    "dlg_fmt_b": "This will create a new {}GB disk with layout: {}\n\nAll existing data will be lost.",
+    "dlg_migrate_t": "Start migration?",
+    "dlg_migrate_b": "Copy {} VM(s) to:\n{}\n\nOriginals will remain unless you confirm removal afterwards.",
+    "dlg_danger_t": "Remove original files?",
+    "dlg_danger_b": "Migration succeeded.\n\nPermanently DELETE the {} migrated VM(s) from {}?\n\nThis cannot be undone.",
+    "btn_confirm_yes": "Yes", "btn_confirm_no": "Cancel",
+    "btn_keep": "No, keep files", "btn_delete_orig": "Yes, delete originals",
+    "warn_exists_t": "Already exists", "warn_exists_b": "VM '{}' already exists.",
+    "warn_clone_t": "Clone failed", "warn_clone_conf": "Could not write conf: {}",
+    "warn_clone_dir": "Directory copy failed: {}",
+    "warn_no_disk_t": "No disk", "warn_no_disk_b": "Disk image not found.",
+    "warn_dup_snap_t": "Duplicate tag", "warn_dup_snap_b": "Snapshot '{}' already exists.",
+    "warn_snap_running_b": "Stop the VM before creating a snapshot.",
+    "warn_snap_fail_t": "Snapshot failed",
+    "warn_fmt_fail_t": "Format failed", "warn_fmt_fail_b": "Command failed: {}",
+    "warn_mig_fail_t": "Migration failed", "warn_mig_fail_b": "rsync returned an error.",
+    "warn_no_vms_t": "No VMs", "warn_no_vms_b": "There are no VMs in the current location.",
+    "warn_same_loc_t": "Same location", "warn_same_loc_b": "Destination is the same as current.",
+    "warn_list_full_t": "List full", "warn_list_full_b": "Maximum 5 saved locations. Remove one first.",
+}
+
+def _load_i18n():
+    for d in [Path(__file__).parent / "translations",
+              Path.home() / ".local/share/quickbox/translations",
+              Path("/usr/share/quickbox/translations")]:
+        for code in (_lang, "en"):
+            p = d / f"{code}.json"
+            if p.exists():
+                try:
+                    data = _json.loads(p.read_text(encoding="utf-8"))
+                    S.update({k: v for k, v in data.items() if k in S})
+                    return
+                except Exception:
+                    pass
+_load_i18n()
+
+# ── config helpers ─────────────────────────────────────────────────────────────
+def read_conf(filepath=None):
+    fp = Path(filepath) if filepath else CONFIG_FILE
+    conf = {}
+    if fp.exists():
+        for line in fp.read_text().splitlines():
+            line = line.strip()
+            if "=" in line and not line.startswith("#"):
+                k, _, v = line.partition("=")
+                conf[k.strip()] = v.strip().strip('"')
+    conf.setdefault("vms_dir", str(Path.home() / "emu"))
+    return conf
+
+def setconf(key, value, filepath=None):
+    fp = Path(filepath) if filepath else CONFIG_FILE
+    content = fp.read_text() if fp.exists() else ""
+    lines = content.splitlines()
+    updated = False
+    for i, line in enumerate(lines):
+        if line.startswith(f"{key}="):
+            lines[i] = f"{key}={value}"
+            updated = True
+            break
+    if not updated:
+        lines.append(f"{key}={value}")
+    fp.write_text("\n".join(lines) + "\n")
+
+def remove_key(key, filepath):
+    fp = Path(filepath)
+    if not fp.exists():
+        return
+    lines = [l for l in fp.read_text().splitlines() if not l.startswith(f"{key}=")]
+    fp.write_text("\n".join(lines) + "\n")
+
+def read_vm_conf(path):
+    conf = {}
+    try:
+        for line in Path(path).read_text().splitlines():
+            line = line.strip()
+            if "=" in line and not line.startswith("#"):
+                k, _, v = line.partition("=")
+                conf[k.strip()] = v.strip().strip('"')
+    except Exception:
+        pass
+    return conf
+
+# ── VM helpers ─────────────────────────────────────────────────────────────────
+def is_running(vmname):
+    try:
+        r = subprocess.run(["pgrep", "-f", f"quickemu.*{vmname}"],
+                           capture_output=True, text=True)
+        return bool(r.stdout.strip())
+    except Exception:
+        return False
+
+def fmt_size(n):
+    for u in ("B", "K", "M", "G", "T"):
+        if n < 1024 or u == "T":
+            return f"{n:.1f}{u}" if u != "B" else f"{n}B"
+        n /= 1024
+
+def dir_size(path):
+    try:
+        r = subprocess.run(["du", "-sh", path], capture_output=True, text=True)
+        return r.stdout.split()[0] if r.stdout.strip() else ""
+    except Exception:
+        return ""
+
+def get_vms(vms_dir):
+    vms = []
+    for conf_path in sorted(glob.glob(f"{vms_dir}/*.conf")):
+        vm = read_vm_conf(conf_path)
+        vm["_conf"]    = conf_path
+        vm["_name"]    = Path(conf_path).stem
+        vm["_pretty"]  = vm.get("pretty", vm["_name"])
+        vm["_running"] = is_running(vm["_name"])
+        disk = vm.get("disk_img", "")
+        vm["_disk"]    = str(Path(vms_dir) / disk) if disk else ""
+        vm["_has_disk"] = Path(vm["_disk"]).exists() if vm["_disk"] else False
+        flag_path = Path(vms_dir) / f".{vm['_name']}.copying"
+        vm["_copying"] = flag_path.exists()
+        vm["_copy_total"] = ""
+        if vm["_copying"]:
+            try:
+                vm["_copy_total"] = fmt_size(int(flag_path.read_text().strip()))
+            except Exception:
+                pass
+        vm["_size"] = dir_size(str(Path(vms_dir) / vm["_name"]))
+        vms.append(vm)
+    return vms
+
+def get_snapshots(disk_path):
+    snaps = []
+    try:
+        r = subprocess.run(["qemu-img", "snapshot", "-l", disk_path],
+                           capture_output=True, text=True)
+        for line in r.stdout.splitlines()[2:]:
+            parts = line.split()
+            if len(parts) >= 2:
+                snaps.append({"id": parts[0], "tag": parts[1]})
+    except Exception:
+        pass
+    return snaps
+
+def get_next_ssh_port(vms_dir, vmname):
+    used = set()
+    for conf_path in glob.glob(f"{vms_dir}/*.conf"):
+        vm = read_vm_conf(conf_path)
+        port = vm.get("ssh_port", "")
+        if port:
+            used.add(int(port))
+    port = 2222
+    while port in used:
+        port += 1
+    return str(port)
+
+def _iso_label(vm, vms_dir):
+    iso = vm.get("iso", "") or ""
+    if not iso:
+        return "—"
+    if vm.get("_copying"):
+        total = vm.get("_copy_total", "")
+        return f"{iso}  ({total})" if total else iso
+    try:
+        size = fmt_size(Path(vms_dir, iso).stat().st_size)
+        return f"{iso}  ({size})"
+    except Exception:
+        return iso
+
+KVM_AVAILABLE = Path("/dev/kvm").exists()
+
+def _date_tag(with_time=False):
+    try:
+        fmt = _locale.nl_langinfo(_locale.D_FMT)
+        d, m, y = fmt.index('%d'), fmt.find('%m'), max(fmt.find('%Y'), fmt.find('%y'))
+        if d < m:        date_fmt = '%d-%m-%Y'
+        elif y > m:      date_fmt = '%m-%d-%Y'
+        else:            date_fmt = '%Y-%m-%d'
+    except Exception:
+        date_fmt = '%Y-%m-%d'
+    now = datetime.datetime.now()
+    return now.strftime(date_fmt) + (now.strftime('-%H%M') if with_time else '')
+
+def notify(title, body, urgency="low"):
+    try:
+        subprocess.Popen(["notify-send", "-i", "qemu", "-u", urgency, title, body])
+    except Exception:
+        pass
+
+# ── profiles ───────────────────────────────────────────────────────────────────
+_PROFILE_KEYS = ["cpu_cores", "ram", "disk_size", "display", "gl", "compat_mode"]
+
+PROFILES = {
+    "standard":    {"label": "Standard",       "desc": "Default setup — UEFI boot, disk created on first launch.", "settings": {}},
+    "live":        {"label": "Live ISO",        "desc": "Boot directly from ISO — no disk required.",
+                   "settings": {"live_mode": "true"}},
+    "lightweight": {"label": "Lightweight",     "desc": "Minimal QEMU — for older or lightweight distros.",
+                   "settings": {"compat_mode": "true", "ram": "2G", "cpu_cores": "2"}},
+    "performance": {"label": "Performance",     "desc": "More CPU and RAM for demanding VMs.",
+                   "settings": {"ram": "8G", "cpu_cores": "4"}},
+    "server":      {"label": "Server / Headless","desc": "No display — runs headless in the background.",
+                   "settings": {"headless": "true"}},
+}
+
+DEFAULT_PROFILES = {
+    "standard.conf":    "#!/usr/bin/quickemu --vm\nguest_os=\"linux\"\n",
+    "live.conf":        "#!/usr/bin/quickemu --vm\nguest_os=\"linux\"\nlive_mode=\"true\"\n",
+    "lightweight.conf": "#!/usr/bin/quickemu --vm\nguest_os=\"linux\"\ncompat_mode=\"true\"\nram=\"2G\"\ncpu_cores=\"2\"\n",
+    "performance.conf": "#!/usr/bin/quickemu --vm\nguest_os=\"linux\"\nram=\"8G\"\ncpu_cores=\"4\"\n",
+    "server.conf":      "#!/usr/bin/quickemu --vm\nguest_os=\"linux\"\nheadless=\"true\"\n",
+}
+
+def ensure_default_profiles():
+    PROFILES_DIR.mkdir(parents=True, exist_ok=True)
+    for name, content in DEFAULT_PROFILES.items():
+        p = PROFILES_DIR / name
+        if not p.exists():
+            p.write_text(content)
+
+# ── stylesheet ─────────────────────────────────────────────────────────────────
+APP_STYLE = """
+QMainWindow, QWidget { font-size: 13px; }
+QToolBar { spacing: 4px; padding: 2px 4px; }
+QToolBar QPushButton {
+    padding: 4px 10px; border-radius: 4px;
+    border: 1px solid palette(mid);
+}
+QToolBar QPushButton:checked {
+    background-color: palette(highlight);
+    color: palette(highlighted-text);
+}
+QListWidget { border: none; outline: none; }
+QListWidget::item { border-radius: 5px; margin: 1px 3px; padding: 4px; }
+QListWidget::item:selected { background-color: rgba(128,128,128,0.3); }
+QListWidget::item:hover { background-color: rgba(128,128,128,0.15); }
+QPushButton.launch { background-color: #1565c0; color: white;
+    border-radius: 6px; padding: 6px 16px; font-weight: bold; font-size: 13px; }
+QPushButton.launch:hover { background-color: #1976d2; }
+QPushButton.danger { color: #c62828; font-weight: bold; }
+QPushButton.danger:disabled { color: rgba(180,50,50,0.35); font-weight: normal; }
+QLabel.section { font-weight: bold; font-size: 11px; color: palette(mid); margin-top: 10px; }
+QLabel.dim { color: palette(mid); }
+QFrame.badge-running { background-color: #2e7d32; border-radius: 3px; }
+QFrame.import-progress { background-color: #e65100; border-radius: 3px; }
+QScrollBar:vertical { width: 8px; }
+QScrollBar::handle:vertical { background: rgba(128,128,128,0.5); border-radius: 4px; min-height: 20px; }
+QScrollBar::handle:vertical:hover { background: rgba(128,128,128,0.75); }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+"""
+
+# ── worker threads ─────────────────────────────────────────────────────────────
+class SnapWorker(QThread):
+    status  = Signal(str)
+    done    = Signal(bool, str)
+
+    def __init__(self, action, disk, tag, parent=None):
+        super().__init__(parent)
+        self.action = action  # "create" | "apply" | "delete"
+        self.disk   = disk
+        self.tag    = tag
+
+    def run(self):
+        if self.action == "create":
+            r = subprocess.run(["qemu-img", "snapshot", "-c", self.tag, self.disk],
+                               capture_output=True, text=True)
+        elif self.action == "apply":
+            r = subprocess.run(["qemu-img", "snapshot", "-a", self.tag, self.disk],
+                               capture_output=True, text=True)
+        elif self.action == "delete":
+            r = subprocess.run(["qemu-img", "snapshot", "-d", self.tag, self.disk],
+                               capture_output=True, text=True)
+        else:
+            self.done.emit(False, "unknown action")
+            return
+        self.done.emit(r.returncode == 0, r.stderr.strip())
+
+
+class CopyWorker(QThread):
+    progress = Signal(str, str)   # (current_size, total_size)
+    done     = Signal(bool, str)
+
+    def __init__(self, src, dst, flag_path, parent=None):
+        super().__init__(parent)
+        self.src  = src
+        self.dst  = dst
+        self.flag = flag_path
+
+    def run(self):
+        try:
+            shutil.copytree(str(self.src), str(self.dst))
+            Path(self.flag).unlink(missing_ok=True)
+            self.done.emit(True, "")
+        except Exception as e:
+            Path(self.flag).unlink(missing_ok=True)
+            self.done.emit(False, str(e))
+
+
+class FormatWorker(QThread):
+    status = Signal(str)
+    done   = Signal(bool, str)
+
+    def __init__(self, disk_path, size_gb, layout, parent=None):
+        super().__init__(parent)
+        self.disk    = disk_path
+        self.size_gb = size_gb
+        self.layout  = layout
+
+    def run(self):
+        try:
+            self.status.emit(S["ntf_fmt_start"].format(self.size_gb))
+            r = subprocess.run(
+                ["qemu-img", "create", "-f", "qcow2", self.disk, f"{self.size_gb}G"],
+                capture_output=True, text=True)
+            if r.returncode != 0:
+                self.done.emit(False, r.stderr.strip())
+                return
+            if self.layout != "raw":
+                nbddev = "/dev/nbd0"
+                subprocess.run(["modprobe", "nbd", "max_part=8"], capture_output=True)
+                subprocess.run(["qemu-nbd", "--connect=" + nbddev, self.disk], capture_output=True)
+                if self.layout == "gpt":
+                    subprocess.run(["parted", "-s", nbddev, "mklabel", "gpt",
+                                    "mkpart", "ESP", "fat32", "1MiB", "513MiB",
+                                    "set", "1", "esp", "on",
+                                    "mkpart", "root", "513MiB", "100%"], capture_output=True)
+                    subprocess.run(["mkfs.fat", "-F32", nbddev + "p1"], capture_output=True)
+                    subprocess.run(["mkfs.ext4", nbddev + "p2"], capture_output=True)
+                elif self.layout == "msd":
+                    subprocess.run(["parted", "-s", nbddev, "mklabel", "msdos",
+                                    "mkpart", "primary", "ext4", "1MiB", "100%"], capture_output=True)
+                    subprocess.run(["mkfs.ext4", nbddev + "p1"], capture_output=True)
+                elif self.layout == "fat":
+                    subprocess.run(["parted", "-s", nbddev, "mklabel", "msdos",
+                                    "mkpart", "primary", "fat32", "1MiB", "100%"], capture_output=True)
+                    subprocess.run(["mkfs.fat", "-F32", nbddev + "p1"], capture_output=True)
+                subprocess.run(["qemu-nbd", "--disconnect", nbddev], capture_output=True)
+            self.done.emit(True, "")
+        except Exception as e:
+            self.done.emit(False, str(e))
+
+
+class ConvertWorker(QThread):
+    status = Signal(str)
+    done   = Signal(bool, str)
+
+    def __init__(self, src, dst, parent=None):
+        super().__init__(parent)
+        self.src = src
+        self.dst = dst
+
+    def run(self):
+        try:
+            self.status.emit(S["ntf_converting"].format(Path(self.src).name))
+            r = subprocess.run(
+                ["qemu-img", "convert", "-f", "raw", "-O", "qcow2", self.src, self.dst],
+                capture_output=True, text=True)
+            if r.returncode == 0:
+                subprocess.run(["qemu-img", "resize", self.dst, "20G"], capture_output=True)
+            self.done.emit(r.returncode == 0, r.stderr.strip())
+        except Exception as e:
+            self.done.emit(False, str(e))
+
+
+class DownloadWorker(QThread):
+    progress = Signal(str, float)   # (text, fraction 0-1)
+    done     = Signal(bool)
+
+    def __init__(self, cmd, vms_dir, parent=None):
+        super().__init__(parent)
+        self.cmd     = cmd
+        self.vms_dir = vms_dir
+        self._cancel = False
+
+    def cancel(self):
+        self._cancel = True
+        if hasattr(self, "_proc") and self._proc:
+            try:
+                self._proc.terminate()
+            except Exception:
+                pass
+
+    def run(self):
+        import math, time
+        self.progress.emit(S["dl2_starting"], 0.0)
+        t0 = time.monotonic()
+
+        def _find_file():
+            try:
+                cutoff = t0 - 2.0
+                files = []
+                for f in Path(self.vms_dir).rglob("*"):
+                    if f.is_file() and f.suffix.lower() in (
+                            ".iso", ".img", ".qcow2", ".gz", ".xz", ".zip",
+                            ".part", ".tmp", ".download"):
+                        st = f.stat()
+                        if st.st_mtime >= cutoff:
+                            files.append((st.st_mtime, f))
+                return sorted(files)[-1][1] if files else None
+            except Exception:
+                return None
+
+        def _watch():
+            elapsed, last_size, last_mb, target = 0, 0, 0.0, None
+            while not self._cancel:
+                time.sleep(1)
+                elapsed += 1
+                if target is None or not target.exists():
+                    target = _find_file()
+                if target and target.exists():
+                    try:
+                        size = target.stat().st_size
+                        mb   = size / (1024 * 1024)
+                        if size > last_size:
+                            frac = math.log1p(mb) / (math.log1p(mb) + 8)
+                            speed = (size - last_size) / (1024 * 1024)
+                            last_mb, last_size = mb, size
+                            self.progress.emit(
+                                S["dl2_progress"].format(f"{mb:.0f}", f"{speed:.1f}"),
+                                min(frac, 0.95))
+                        else:
+                            self.progress.emit(
+                                S["dl2_progress"].format(f"{last_mb:.0f}", "–"),
+                                min(math.log1p(last_mb) / (math.log1p(last_mb) + 8), 0.95))
+                    except Exception:
+                        pass
+                else:
+                    frac = min(math.log1p(elapsed / 10) / (math.log1p(elapsed / 10) + 6), 0.4)
+                    self.progress.emit(S["dl2_connecting"].format(elapsed), frac)
+
+        watcher = threading.Thread(target=_watch, daemon=True)
+        watcher.start()
+        try:
+            self._proc = subprocess.Popen(
+                self.cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                cwd=self.vms_dir)
+            self._proc.wait()
+            rc = self._proc.returncode
+        except Exception:
+            rc = 1
+        self._cancel = True
+        import time; time.sleep(1.2)
+        if rc == 0:
+            self.progress.emit(S["dl2_verifying"], 0.97)
+            import time; time.sleep(1.0)
+            self.progress.emit(S["dl2_done"], 1.0)
+        else:
+            self.progress.emit(S["dl2_failed"] if not self._cancel else S["dl2_cancelled"], 0.0)
+        self.done.emit(rc == 0)
+
+
+class UpdateDistroWorker(QThread):
+    done = Signal(bool)
+    def run(self):
+        try:
+            r = subprocess.run(["quickget", "--show-all"], capture_output=True, text=True, timeout=60)
+            if r.returncode == 0:
+                out_path = Path.home() / ".config/quickbox/quickinst.csv"
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                lines = []
+                for line in r.stdout.splitlines():
+                    parts = line.strip().split()
+                    if len(parts) >= 2:
+                        name = " ".join(parts[:2]).title()
+                        cmd  = "quickget " + " ".join(parts)
+                        lines.append(f'"{name}","{cmd}"')
+                out_path.write_text("\n".join(lines) + "\n")
+                self.done.emit(True)
+            else:
+                self.done.emit(False)
+        except Exception:
+            self.done.emit(False)
+
+
+# ── VM list item ───────────────────────────────────────────────────────────────
+class VMItemWidget(QWidget):
+    def __init__(self, vm, parent=None):
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 5, 8, 5)
+        layout.setSpacing(8)
+
+        dot = QLabel()
+        if vm.get("_copying"):
+            dot.setText("●")
+            dot.setStyleSheet("color: #ff9800; font-size: 14px;")
+        elif vm["_running"]:
+            dot.setText("●")
+            dot.setStyleSheet("color: #4caf50; font-size: 14px;")
+        elif vm["_has_disk"]:
+            dot.setText("●")
+            dot.setStyleSheet("color: #888; font-size: 14px;")
+        else:
+            dot.setText("●")
+            dot.setStyleSheet("color: #ff9800; font-size: 14px;")
+        layout.addWidget(dot)
+
+        if vm.get("_copying"):
+            center = QHBoxLayout()
+            total = vm.get("_copy_total", "")
+            size_text = f"{vm['_size']} / {total}" if total else vm["_size"]
+            badge = QLabel(f"{size_text}  importing")
+            badge.setStyleSheet("background:#e65100; color:white; border-radius:3px; padding:1px 5px; font-size:11px;")
+            center.addStretch()
+            center.addWidget(badge)
+            center.addStretch()
+            layout.addLayout(center)
+            layout.setStretch(1, 1)
+        else:
+            name_lbl = QLabel(vm["_pretty"])
+            name_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+            layout.addWidget(name_lbl, 1)
+
+            if vm["_running"]:
+                badge = QLabel(S["badge_running"])
+                badge.setStyleSheet("background:#2e7d32; color:white; border-radius:3px; padding:1px 5px; font-size:11px;")
+                layout.addWidget(badge)
+
+            size_lbl = QLabel(vm["_size"])
+            size_lbl.setStyleSheet("color: palette(mid); font-size: 11px;")
+            size_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            layout.addWidget(size_lbl)
+
+
+# ── section header helper ──────────────────────────────────────────────────────
+def make_section(text):
+    lbl = QLabel(text)
+    lbl.setStyleSheet("font-weight:bold; font-size:11px; color:palette(mid); margin-top:10px;")
+    return lbl
+
+
+def make_sep(horizontal=True):
+    f = QFrame()
+    f.setFrameShape(QFrame.Shape.HLine if horizontal else QFrame.Shape.VLine)
+    f.setFrameShadow(QFrame.Shadow.Sunken)
+    return f
+
+
+# ── collapsible section header ─────────────────────────────────────────────────
+class SectionHeader(QWidget):
+    def __init__(self, text, expanded, conf_key, conf, parent=None):
+        super().__init__(parent)
+        self.conf_key = conf_key
+        self.conf     = conf
+        self._content = []
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 6, 0, 2)
+        layout.setSpacing(0)
+
+        self.lbl = QLabel(text)
+        self.lbl.setStyleSheet("font-weight:bold; font-size:11px; color:palette(mid);")
+        layout.addWidget(self.lbl, 1)
+
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.VLine)
+        sep.setFrameShadow(QFrame.Shadow.Sunken)
+        sep.setFixedHeight(14)
+        sep.setStyleSheet("margin: 0 4px;")
+        layout.addWidget(sep)
+
+        self.btn = QPushButton(S["btn_hide"] if expanded else S["btn_show"])
+        self.btn.setFlat(True)
+        self.btn.setStyleSheet("font-size:11px; color:palette(mid); padding:0 2px;")
+        self.btn.clicked.connect(self._toggle)
+        layout.addWidget(self.btn)
+
+        self._expanded = expanded
+
+    def add_content(self, widget):
+        self._content.append(widget)
+        widget.setVisible(self._expanded)
+
+    def _toggle(self):
+        self._expanded = not self._expanded
+        for w in self._content:
+            w.setVisible(self._expanded)
+        self.btn.setText(S["btn_hide"] if self._expanded else S["btn_show"])
+        val = "true" if self._expanded else "false"
+        setconf(self.conf_key, val)
+        self.conf[self.conf_key] = val
+
+
+# ── main window ────────────────────────────────────────────────────────────────
+class QuickboxWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.conf        = read_conf()
+        self.vms_dir     = self.conf.get("vms_dir", str(Path.home() / "emu"))
+        self.vms         = []
+        self.current_vm  = None
+        self._any_importing = False
+        self._conf_mtimes   = {}
+        self._vms_dir_mtime = 0
+
+        # Clean stale copy flags
+        for f in Path(self.vms_dir).glob(".*.copying"):
+            f.unlink(missing_ok=True)
+
+        ensure_default_profiles()
+        self._build_ui()
+        self._build_tray()
+        self._init_ipc()
+        self._refresh()
+
+        # Timers
+        self._t_state   = QTimer(self); self._t_state.timeout.connect(self._poll_running_state); self._t_state.start(4000)
+        self._t_dir     = QTimer(self); self._t_dir.timeout.connect(self._poll_vms_dir);        self._t_dir.start(4000)
+        self._t_copy    = QTimer(self); self._t_copy.timeout.connect(self._poll_copying);       self._t_copy.start(2000)
+
+        self.setWindowIcon(QIcon.fromTheme("qemu"))
+
+    # ── UI skeleton ─────────────────────────────────────────────────────────────
+    def _build_ui(self):
+        self.setWindowTitle(S["app_title"])
+        self.resize(int(self.conf.get("win_w", "900")),
+                    int(self.conf.get("win_h", "620")))
+        self.setMinimumSize(720, 480)
+
+        # toolbar
+        tb = QToolBar()
+        tb.setMovable(False)
+        tb.setIconSize(QSize(16, 16))
+
+        self._tray_btn = QPushButton(f"⊡  {S['hdr_tray']}")
+        self._tray_btn.setCheckable(True)
+        self._tray_btn.setChecked(self.conf.get("systray") == "true")
+        self._tray_btn.setToolTip(S["tt_tray"])
+        self._tray_btn.toggled.connect(self._on_tray_toggle)
+        tb.addWidget(self._tray_btn)
+        tb.addSeparator()
+
+        self._hdr_btns = []
+        for label, tip, cb in [
+            (S["hdr_download"],  S["tt_download"],  self._dlg_download),
+            (S["hdr_custom_vm"], S["tt_custom_vm"], self._dlg_custom),
+            (S["hdr_advanced"],  S["tt_advanced"],  self._dlg_advanced),
+        ]:
+            btn = QPushButton(label)
+            btn.setToolTip(tip)
+            btn.clicked.connect(cb)
+            tb.addWidget(btn)
+            self._hdr_btns.append(btn)
+
+        self.addToolBar(tb)
+
+        # splitter
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+
+        # left: search + list
+        left = QWidget()
+        lv   = QVBoxLayout(left)
+        lv.setContentsMargins(4, 4, 4, 4)
+        lv.setSpacing(4)
+
+        self._search = QLineEdit()
+        self._search.setPlaceholderText(S["search_ph"])
+        self._search.textChanged.connect(self._on_search)
+        lv.addWidget(self._search)
+
+        self._list = QListWidget()
+        self._list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self._list.currentItemChanged.connect(self._on_select)
+        lv.addWidget(self._list)
+
+        splitter.addWidget(left)
+
+        # right: scroll area
+        self._right_scroll = QScrollArea()
+        self._right_scroll.setWidgetResizable(True)
+        self._right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._right_widget = QWidget()
+        self._right_layout = QVBoxLayout(self._right_widget)
+        self._right_layout.setContentsMargins(16, 12, 16, 16)
+        self._right_layout.setSpacing(4)
+        self._right_layout.addStretch()
+        self._right_scroll.setWidget(self._right_widget)
+        splitter.addWidget(self._right_scroll)
+
+        splitter.setSizes([280, 620])
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        self.setCentralWidget(splitter)
+
+        # status bar
+        self._status = QStatusBar()
+        self._status.setSizeGripEnabled(False)
+        self.setStatusBar(self._status)
+
+        self._show_welcome()
+
+    def _clear_right(self):
+        while self._right_layout.count():
+            item = self._right_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+    def _show_welcome(self):
+        self._clear_right()
+        lbl = QLabel(S["welcome"])
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl.setStyleSheet("color: palette(mid); font-size: 14px;")
+        self._right_layout.addStretch()
+        self._right_layout.addWidget(lbl, alignment=Qt.AlignmentFlag.AlignCenter)
+        self._right_layout.addStretch()
+
+    # ── refresh ──────────────────────────────────────────────────────────────────
+    def _refresh(self):
+        current_name = self.current_vm["_name"] if self.current_vm else None
+        search = self._search.text().lower()
+
+        self._list.blockSignals(True)
+        self._list.clear()
+        self.vms = get_vms(self.vms_dir)
+
+        for vm in self.vms:
+            if search and search not in vm["_pretty"].lower() and search not in vm["_name"].lower():
+                continue
+            item = QListWidgetItem()
+            widget = VMItemWidget(vm)
+            item.setSizeHint(widget.sizeHint())
+            item.setData(Qt.ItemDataRole.UserRole, vm)
+            self._list.addItem(item)
+            self._list.setItemWidget(item, widget)
+
+        importing = any(v.get("_copying") for v in self.vms)
+        self._any_importing = importing
+        for b in self._hdr_btns:
+            b.setEnabled(not importing)
+
+        n = len(self.vms)
+        label = S["status_vms_pl"].format(n) if n != 1 else S["status_vms"].format(n)
+        self._status.showMessage(f"{self.vms_dir}  •  {label}")
+
+        # re-select
+        if current_name:
+            for i in range(self._list.count()):
+                vm = self._list.item(i).data(Qt.ItemDataRole.UserRole)
+                if vm and vm["_name"] == current_name:
+                    self._list.setCurrentRow(i)
+                    self.current_vm = vm
+                    break
+
+        self._list.blockSignals(False)
+        return False
+
+    def _on_search(self, text):
+        self._refresh()
+
+    def _on_select(self, current, _prev):
+        if current:
+            vm = current.data(Qt.ItemDataRole.UserRole)
+            if vm:
+                self.current_vm = vm
+                self._show_panel(vm)
+
+    # ── polling ───────────────────────────────────────────────────────────────────
+    def _poll_running_state(self):
+        if not self.vms:
+            return
+        changed = any(is_running(v["_name"]) != v["_running"] for v in self.vms)
+        if changed:
+            self._refresh()
+            if self.current_vm:
+                self._show_panel(self.current_vm)
+
+    def _poll_vms_dir(self):
+        try:
+            mtime = os.stat(self.vms_dir).st_mtime
+            if mtime != self._vms_dir_mtime:
+                if self._vms_dir_mtime != 0:
+                    self._refresh()
+                    if self.current_vm:
+                        self._show_panel(self.current_vm)
+                self._vms_dir_mtime = mtime
+            changed = False
+            for p in Path(self.vms_dir).glob("*.conf"):
+                m = p.stat().st_mtime
+                if self._conf_mtimes.get(str(p)) != m:
+                    changed = True
+                    self._conf_mtimes[str(p)] = m
+            if changed and self._vms_dir_mtime != 0:
+                self._refresh()
+                if self.current_vm:
+                    self._show_panel(self.current_vm)
+        except Exception:
+            pass
+
+    def _poll_copying(self):
+        if list(Path(self.vms_dir).glob(".*.copying")):
+            self._refresh()
+
+    # ── IPC ───────────────────────────────────────────────────────────────────────
+    def _init_ipc(self):
+        self._ipc_notifier = QSocketNotifier(
+            _lock_socket.fileno(), QSocketNotifier.Type.Read, self)
+        self._ipc_notifier.activated.connect(self._on_ipc)
+
+    def _on_ipc(self, fd):
+        try:
+            conn, _ = _lock_socket.accept()
+            msg = conn.recv(64).decode().strip()
+            conn.close()
+            if "activate" in msg:
+                self.show()
+                self.raise_()
+                self.activateWindow()
+        except Exception:
+            pass
+
+    # ── systray ───────────────────────────────────────────────────────────────────
+    def _build_tray(self):
+        self._tray = QSystemTrayIcon(QIcon.fromTheme("qemu"), self)
+        menu = QMenu()
+        show_act = QAction("Show / Hide", self)
+        show_act.triggered.connect(self._tray_toggle)
+        quit_act = QAction("Quit", self)
+        quit_act.triggered.connect(QApplication.quit)
+        menu.addAction(show_act)
+        menu.addSeparator()
+        menu.addAction(quit_act)
+        self._tray.setContextMenu(menu)
+        self._tray.activated.connect(lambda r: self._tray_toggle() if r == QSystemTrayIcon.ActivationReason.Trigger else None)
+        if self.conf.get("systray") == "true":
+            self._tray.show()
+
+    def _tray_toggle(self):
+        if self.isVisible():
+            self.hide()
+        else:
+            self.show()
+            self.raise_()
+            self.activateWindow()
+
+    def _on_tray_toggle(self, checked):
+        setconf("systray", "true" if checked else "false")
+        self.conf["systray"] = "true" if checked else "false"
+        if checked:
+            self._tray.show()
+        else:
+            self._tray.hide()
+
+    def closeEvent(self, event):
+        if self._tray.isVisible() and self.conf.get("systray") == "true":
+            self.hide()
+            event.ignore()
+        else:
+            self.conf["win_w"] = str(self.width())
+            self.conf["win_h"] = str(self.height())
+            setconf("win_w", str(self.width()))
+            setconf("win_h", str(self.height()))
+            event.accept()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_F5 or (event.modifiers() & Qt.KeyboardModifier.ControlModifier and event.key() == Qt.Key.Key_R):
+            self._refresh()
+        super().keyPressEvent(event)
+
+    # ── detail panel ─────────────────────────────────────────────────────────────
+    def _show_panel(self, vm):
+        self._clear_right()
+        read_only = self._any_importing
+
+        # Title
+        title = QLabel(f"<b><span style='font-size:16px'>{html.escape(vm['_pretty'])}</span></b>")
+        title.setTextFormat(Qt.TextFormat.RichText)
+        self._right_layout.addWidget(title)
+
+        sub = QLabel(f"<span style='color:gray; font-size:11px'>{html.escape(vm['_name'])}  •  {vm['_size']}</span>")
+        sub.setTextFormat(Qt.TextFormat.RichText)
+        self._right_layout.addWidget(sub)
+        self._right_layout.addWidget(make_sep())
+
+        if read_only and not (Path(self.vms_dir) / f".{vm['_name']}.copying").exists():
+            notice = QLabel("⏳ <span style='color:#ff9800'>Import in progress — settings locked</span>")
+            notice.setTextFormat(Qt.TextFormat.RichText)
+            self._right_layout.addWidget(notice)
+
+        # ── Launch section ──
+        self._right_layout.addWidget(make_section(S["sec_launch"]))
+        launch_box = QWidget()
+        lb = QHBoxLayout(launch_box)
+        lb.setContentsMargins(0, 4, 0, 0)
+
+        flag = Path(self.vms_dir) / f".{vm['_name']}.copying"
+        if flag.exists():
+            lbl = QLabel(f"<span style='color:#ff9800;font-weight:bold'>{S['vm_copying']}</span>")
+            lbl.setTextFormat(Qt.TextFormat.RichText)
+            lb.addWidget(lbl)
+        elif vm["_running"]:
+            lbl = QLabel(f"<span style='color:#4caf50;font-weight:bold'>{S['vm_running']}</span>")
+            lbl.setTextFormat(Qt.TextFormat.RichText)
+            lb.addWidget(lbl)
+            stop_btn = QPushButton(S["btn_stop"])
+            stop_btn.clicked.connect(lambda: self._stop_vm(vm))
+            lb.addWidget(stop_btn)
+        else:
+            launch_btn = QPushButton(S["btn_launch"])
+            launch_btn.setProperty("class", "launch")
+            launch_btn.setStyleSheet("background:#1565c0;color:white;border-radius:6px;padding:6px 16px;font-weight:bold;font-size:13px;")
+            launch_btn.setEnabled(not read_only)
+            launch_btn.clicked.connect(lambda: self._launch_vm(vm))
+            lb.addWidget(launch_btn)
+        lb.addStretch()
+        self._right_layout.addWidget(launch_box)
+
+        # ── Info section ──
+        info_hdr = SectionHeader(S["sec_info"], self.conf.get("info_expanded", "true") == "true",
+                                 "info_expanded", self.conf)
+        self._right_layout.addWidget(info_hdr)
+
+        info_grid = QWidget()
+        ig = QGridLayout(info_grid)
+        ig.setContentsMargins(0, 4, 0, 0)
+        ig.setColumnStretch(1, 1)
+        infos = [
+            (S["info_guest_os"],  vm.get("guest_os", "linux")),
+            (S["info_boot_mode"], vm.get("boot", "uefi")),
+            (S["info_ssh_port"],  vm.get("ssh_port", "—") or "—"),
+            (S["info_disk"],      vm.get("disk_img", "—")),
+            (S["info_iso"],       _iso_label(vm, self.vms_dir)),
+        ]
+        for row, (k, v) in enumerate(infos):
+            kl = QLabel(k + ":")
+            kl.setStyleSheet("color:palette(mid);")
+            kl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+            vl = QLabel(v)
+            vl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            vl.setWordWrap(True)
+            ig.addWidget(kl, row, 0)
+            ig.addWidget(vl, row, 1)
+        info_hdr.add_content(info_grid)
+        self._right_layout.addWidget(info_grid)
+
+        # ── Settings section ──
+        settings_hdr = SectionHeader(S["sec_settings"],
+                                     self.conf.get("settings_expanded", "true") == "true",
+                                     "settings_expanded", self.conf)
+        self._right_layout.addWidget(settings_hdr)
+
+        settings_w = QWidget()
+        sg = QGridLayout(settings_w)
+        sg.setContentsMargins(0, 4, 0, 0)
+        sg.setColumnStretch(1, 1)
+        sg.setHorizontalSpacing(12)
+        sg.setVerticalSpacing(6)
+
+        # Profile
+        pl = QLabel(S["set_profile"])
+        pl.setStyleSheet("color:palette(mid);")
+        pl.setAlignment(Qt.AlignmentFlag.AlignRight)
+        _profile_ids = list(PROFILES.keys())
+        pc = QComboBox()
+        for pid in _profile_ids:
+            pc.addItem(PROFILES[pid]["label"], pid)
+        cur = vm.get("vm_profile", "standard")
+        pc.setCurrentIndex(_profile_ids.index(cur) if cur in _profile_ids else 0)
+        pc.setEnabled(not read_only)
+        profile_desc = QLabel()
+        profile_desc.setStyleSheet("color:palette(mid); font-size:11px;")
+        profile_desc.setWordWrap(True)
+        profile_desc.setText(PROFILES.get(cur, PROFILES["standard"])["desc"])
+        pc.currentIndexChanged.connect(lambda i, v=vm, d=profile_desc, ids=_profile_ids:
+                                       self._on_profile_changed(pc, v, d, ids))
+        sg.addWidget(pl, 0, 0)
+        sg.addWidget(pc, 0, 1)
+        sg.addWidget(profile_desc, 1, 1)
+
+        # Compat mode
+        cl = QLabel(S["set_compat"])
+        cl.setStyleSheet("color:palette(mid);")
+        cl.setAlignment(Qt.AlignmentFlag.AlignRight)
+        cs = QCheckBox()
+        cs.setChecked(vm.get("compat_mode") == "true")
+        cs.setEnabled(not read_only)
+        cs.toggled.connect(lambda v, vm=vm: (
+            setconf("compat_mode", "true" if v else "false", vm["_conf"]),
+            vm.update({"compat_mode": "true" if v else "false"})))
+        hint = QLabel(S["set_compat_hint"])
+        hint.setStyleSheet("color:palette(mid); font-size:11px;")
+        hint.setWordWrap(True)
+        sg.addWidget(cl, 2, 0)
+        sg.addWidget(cs, 2, 1)
+        sg.addWidget(hint, 3, 1)
+
+        # Boot mode
+        bl = QLabel(S["set_boot"])
+        bl.setStyleSheet("color:palette(mid);")
+        bl.setAlignment(Qt.AlignmentFlag.AlignRight)
+        bc = QComboBox()
+        bc.addItem(S["boot_uefi"], "uefi")
+        bc.addItem(S["boot_legacy"], "legacy")
+        cur_boot = vm.get("boot", "uefi")
+        bc.setCurrentIndex(0 if cur_boot == "uefi" else 1)
+        bc.setEnabled(not read_only)
+        bc.currentIndexChanged.connect(lambda i, v=vm:
+            (setconf("boot", bc.currentData(), v["_conf"]),
+             v.update({"boot": bc.currentData()})))
+        sg.addWidget(bl, 4, 0)
+        sg.addWidget(bc, 4, 1)
+
+        settings_hdr.add_content(settings_w)
+        self._right_layout.addWidget(settings_w)
+
+        # ── Snapshots section ──
+        snaps_hdr = SectionHeader(S["sec_snapshots"],
+                                  self.conf.get("snaps_expanded", "true") == "true",
+                                  "snaps_expanded", self.conf)
+        self._right_layout.addWidget(snaps_hdr)
+
+        snaps_w = QWidget()
+        sv = QVBoxLayout(snaps_w)
+        sv.setContentsMargins(0, 4, 0, 0)
+        sv.setSpacing(3)
+
+        if not vm["_has_disk"]:
+            nl = QLabel(S["snap_no_disk"])
+            nl.setStyleSheet("color:palette(mid);")
+            sv.addWidget(nl)
+        else:
+            snaps = get_snapshots(vm["_disk"])
+            current_snap = vm.get("current_snap", "")
+            snap_tags = [s["tag"] for s in snaps]
+
+            if not snaps:
+                nl = QLabel(S["snap_none"])
+                nl.setStyleSheet("color:palette(mid);")
+                sv.addWidget(nl)
+            else:
+                for snap in snaps:
+                    row = QWidget()
+                    rl  = QHBoxLayout(row)
+                    rl.setContentsMargins(0, 2, 0, 2)
+                    row.setStyleSheet("background:rgba(128,128,128,0.07); border-radius:4px; padding:2px;")
+                    lbl_text = snap["tag"]
+                    if snap["tag"] == current_snap:
+                        lbl_text = f"● {snap['tag']}"
+                    lbl = QLabel(lbl_text)
+                    if snap["tag"] == current_snap:
+                        lbl.setStyleSheet("color:#4caf50; font-weight:bold;")
+                    lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+                    rl.addWidget(lbl)
+
+                    del_btn = QPushButton(S["snap_delete"])
+                    del_btn.setFixedWidth(70)
+                    del_btn.setEnabled(not read_only)
+                    del_btn.clicked.connect(lambda _, t=snap["tag"]: self._snap_delete(vm, t))
+                    rl.addWidget(del_btn)
+
+                    apply_btn = QPushButton(S["snap_apply"])
+                    apply_btn.setFixedWidth(70)
+                    apply_btn.setEnabled(not read_only)
+                    apply_btn.clicked.connect(lambda _, t=snap["tag"]: self._snap_apply(vm, t))
+                    rl.addWidget(apply_btn)
+                    sv.addWidget(row)
+
+            sep2 = make_sep()
+            sep2.setStyleSheet("margin:4px 0;")
+            sv.addWidget(sep2)
+            create_row = QWidget()
+            cr = QHBoxLayout(create_row)
+            cr.setContentsMargins(0, 0, 0, 0)
+            self._snap_entry = QLineEdit()
+            self._snap_entry.setPlaceholderText(S["snap_entry_ph"])
+            self._snap_entry.setFixedWidth(180)
+            create_btn = QPushButton(S["snap_create"])
+            create_btn.setEnabled(not read_only)
+            create_btn.clicked.connect(lambda: self._snap_create(vm))
+            cr.addWidget(self._snap_entry)
+            cr.addWidget(create_btn)
+            cr.addStretch()
+            sv.addWidget(create_row)
+
+        snaps_hdr.add_content(snaps_w)
+        self._right_layout.addWidget(snaps_w)
+
+        # ── Actions section ──
+        acts_hdr = SectionHeader(S["sec_actions"],
+                                 self.conf.get("acts_expanded", "true") == "true",
+                                 "acts_expanded", self.conf)
+        self._right_layout.addWidget(acts_hdr)
+
+        acts_w = QWidget()
+        av = QVBoxLayout(acts_w)
+        av.setContentsMargins(0, 4, 0, 0)
+        av.setSpacing(4)
+
+        # Toggles
+        tog_row = QWidget()
+        tg = QGridLayout(tog_row)
+        tg.setContentsMargins(0, 0, 0, 0)
+        tg.setColumnStretch(2, 1)
+        tg.setHorizontalSpacing(8)
+
+        ql = QLabel(S["set_quiet"] + ":")
+        ql.setStyleSheet("color:palette(mid);")
+        qc = QCheckBox()
+        qc.setChecked(vm.get("quiet_launch") == "true")
+        qc.setEnabled(not read_only)
+        qc.toggled.connect(lambda v, vm=vm: (
+            setconf("quiet_launch", "true" if v else "false", vm["_conf"]),
+            vm.update({"quiet_launch": "true" if v else "false"})))
+        qn = QLabel(S["set_quiet_note"])
+        qn.setStyleSheet("color:palette(mid); font-size:11px;")
+        tg.addWidget(ql, 0, 0)
+        tg.addWidget(qc, 0, 1)
+        tg.addWidget(qn, 0, 2)
+        av.addWidget(tog_row)
+
+        # Action buttons
+        btn_row = QWidget()
+        br = QHBoxLayout(btn_row)
+        br.setContentsMargins(0, 4, 0, 0)
+        for lbl_key, tt_key, cb in [
+            ("act_edit_conf", "tt_edit_conf", lambda: subprocess.Popen(["geany", vm["_conf"]])),
+            ("act_clone",     "tt_clone",     lambda: self._clone_vm(vm)),
+            ("act_open_dir",  "tt_open_dir",  lambda: subprocess.Popen(["xdg-open", str(Path(self.vms_dir) / vm["_name"])])),
+        ]:
+            btn = QPushButton(S[lbl_key])
+            btn.setToolTip(S[tt_key])
+            btn.setEnabled(not read_only)
+            btn.clicked.connect(cb)
+            br.addWidget(btn)
+        br.addStretch()
+        av.addWidget(btn_row)
+
+        # Danger zone
+        dng_row = QWidget()
+        dr = QHBoxLayout(dng_row)
+        dr.setContentsMargins(0, 4, 0, 0)
+        for lbl_key, tt_key, cb in [
+            ("dng_del_disk", "tt_del_disk", lambda: self._delete_disk(vm)),
+            ("dng_fmt_disk", "tt_fmt_disk", lambda: self._dlg_format_disk(vm)),
+            ("dng_del_vm",   "tt_del_vm",   lambda: self._delete_vm(vm)),
+        ]:
+            btn = QPushButton(S[lbl_key])
+            btn.setToolTip(S[tt_key])
+            btn.setEnabled(not read_only)
+            btn.setStyleSheet("color:#c62828; font-weight:bold;")
+            btn.clicked.connect(cb)
+            dr.addWidget(btn)
+        dr.addStretch()
+        av.addWidget(dng_row)
+
+        acts_hdr.add_content(acts_w)
+        self._right_layout.addWidget(acts_w)
+        self._right_layout.addStretch()
+
+    # ── launch / stop ─────────────────────────────────────────────────────────────
+    def _launch_vm(self, vm):
+        vmname    = vm["_name"]
+        vmdir     = str(Path(self.vms_dir) / vmname)
+        conf_path = vm["_conf"]
+        ssh_port  = vm.get("ssh_port", "")
+        if not ssh_port:
+            ssh_port = get_next_ssh_port(self.vms_dir, vmname)
+            setconf("ssh_port", ssh_port, conf_path)
+            vm["ssh_port"] = ssh_port
+
+        disk_img  = vm.get("disk_img", "")
+        disk_path = str(Path(self.vms_dir) / disk_img) if disk_img else ""
+        if disk_path and not Path(disk_path).exists():
+            Path(vmdir).mkdir(parents=True, exist_ok=True)
+            disk_size = vm.get("disk_size", "32G")
+            subprocess.run(["qemu-img", "create", "-f", "qcow2", disk_path, disk_size])
+
+        accel = "kvm" if KVM_AVAILABLE else "tcg"
+        quiet = vm.get("quiet_launch") == "true"
+
+        cmd = ["quickemu", "--vm", conf_path, "--display", "sdl"]
+        subprocess.Popen(cmd, cwd=self.vms_dir)
+        if not quiet:
+            notify("quickbox", S["ntf_launching"].format(vmname), "low")
+        setconf("snap_dirty", "true", conf_path)
+        QTimer.singleShot(3000, self._refresh)
+
+    def _stop_vm(self, vm):
+        try:
+            subprocess.run(["pkill", "-f", f"quickemu.*{vm['_name']}"])
+        except Exception:
+            pass
+        QTimer.singleShot(1500, self._refresh)
+
+    # ── snapshots ─────────────────────────────────────────────────────────────────
+    def _snap_create(self, vm):
+        tag = self._snap_entry.text().strip()
+        if not tag:
+            return
+        if vm["_running"]:
+            self._warn(S["warn_snap_fail_t"], S["warn_snap_running_b"])
+            return
+        snaps = get_snapshots(vm["_disk"])
+        if any(s["tag"] == tag for s in snaps):
+            self._warn(S["warn_dup_snap_t"], S["warn_dup_snap_b"].format(tag))
+            return
+        worker = SnapWorker("create", vm["_disk"], tag)
+        worker.done.connect(lambda ok, err, v=vm, t=tag: self._on_snap_done(ok, err, "create", v, t))
+        worker.start()
+
+    def _snap_delete(self, vm, tag):
+        if not self._confirm(S["dlg_snap_del_t"].format(tag), S["dlg_snap_del_b"]):
+            return
+        worker = SnapWorker("delete", vm["_disk"], tag)
+        worker.done.connect(lambda ok, err, v=vm: (
+            notify("quickbox", S["ntf_snap_applied"].format(tag)) if ok else
+            self._warn(S["warn_snap_fail_t"], err),
+            self._show_panel(v)))
+        worker.start()
+
+    def _snap_apply(self, vm, tag):
+        auto_tag = f"pre-apply-{_date_tag(with_time=True)}"
+        disk_unchanged = (vm.get("current_snap") == tag and vm.get("snap_dirty") != "true")
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(S["dlg_snap_apply_t"].format(tag))
+        dlg.setWindowIcon(QIcon.fromTheme("qemu"))
+        dlg.resize(460, 200)
+        v = QVBoxLayout(dlg)
+
+        warn = QLabel(S["dlg_snap_apply_b"])
+        warn.setWordWrap(True)
+        v.addWidget(warn)
+
+        save_row = QWidget()
+        sr = QHBoxLayout(save_row)
+        if disk_unchanged:
+            chk = QCheckBox(S["snap_autosave_skip"])
+            chk.setEnabled(False)
+            sr.addWidget(chk)
+        else:
+            chk = QCheckBox(S["snap_autosave_chk"])
+            chk.setChecked(True)
+            name_entry = QLineEdit(auto_tag)
+            name_entry.setMinimumWidth(200)
+            chk.toggled.connect(name_entry.setEnabled)
+            sr.addWidget(chk)
+            sr.addWidget(name_entry)
+        v.addWidget(save_row)
+
+        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        btns.button(QDialogButtonBox.StandardButton.Ok).setText(S["snap_apply"])
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        v.addWidget(btns)
+
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        save_first = not disk_unchanged and chk.isChecked()
+        save_name  = name_entry.text().strip() if save_first else auto_tag
+
+        def _do_apply():
+            if save_first:
+                r = subprocess.run(["qemu-img", "snapshot", "-c", save_name, vm["_disk"]],
+                                   capture_output=True)
+                if r.returncode == 0:
+                    notify("quickbox", S["snap_autosave_done"].format(save_name))
+            r2 = subprocess.run(["qemu-img", "snapshot", "-a", tag, vm["_disk"]],
+                                 capture_output=True, text=True)
+            if r2.returncode == 0:
+                setconf("current_snap", tag, vm["_conf"])
+                setconf("snap_dirty", "false", vm["_conf"])
+                vm["current_snap"] = tag
+                notify("quickbox", S["ntf_snap_applied"].format(tag))
+            QMetaObject.invokeMethod(self, "_refresh_panel", Qt.ConnectionType.QueuedConnection,
+                                     Q_ARG(object, vm))
+
+        threading.Thread(target=_do_apply, daemon=True).start()
+
+    def _on_snap_done(self, ok, err, action, vm, tag):
+        if ok:
+            if action == "create":
+                notify("quickbox", S["ntf_snap_created"].format(tag))
+        else:
+            self._warn(S["warn_snap_fail_t"], err)
+        self._show_panel(vm)
+
+    # helper slot for cross-thread panel refresh
+    def _refresh_panel(self, vm):
+        # reload vm from disk
+        refreshed = read_vm_conf(vm["_conf"])
+        vm.update(refreshed)
+        self._show_panel(vm)
+
+    # ── clone ─────────────────────────────────────────────────────────────────────
+    def _clone_vm(self, vm):
+        suggested = f"{vm['_name']}-{_date_tag()}"
+        dlg = QDialog(self)
+        dlg.setWindowTitle(S["clone_title"])
+        dlg.setWindowIcon(QIcon.fromTheme("qemu"))
+        dlg.resize(380, 150)
+        v = QVBoxLayout(dlg)
+        v.addWidget(QLabel(S["clone_label"].format(vm["_pretty"])))
+        entry = QLineEdit(suggested)
+        entry.setToolTip(S["clone_tt"])
+        v.addWidget(entry)
+        hint = QLabel(S["clone_hint"])
+        hint.setStyleSheet("color:palette(mid); font-size:11px;")
+        v.addWidget(hint)
+        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        btns.button(QDialogButtonBox.StandardButton.Ok).setText(S["btn_clone"])
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        v.addWidget(btns)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        dest_name = entry.text().strip()
+        if not dest_name:
+            return
+        dest_conf = Path(self.vms_dir) / f"{dest_name}.conf"
+        dest_dir  = Path(self.vms_dir) / dest_name
+        src_dir   = Path(self.vms_dir) / vm["_name"]
+        src_conf  = Path(vm["_conf"])
+        if dest_conf.exists() or dest_dir.exists():
+            self._warn(S["warn_exists_t"], S["warn_exists_b"].format(dest_name))
+            return
+
+        try:
+            src_vm = read_vm_conf(str(src_conf))
+            skip_keys = {"vm_ram", "vm_cpu", "ssh_port"}
+            out = ["#!/usr/bin/quickemu --vm"]
+            for k, val in src_vm.items():
+                if k in skip_keys:
+                    continue
+                if k == "pretty":
+                    out.append(f'pretty="{dest_name}"')
+                elif k == "disk_img" and val and vm["_name"] in val:
+                    out.append(f'{k}="{val.replace(vm["_name"], dest_name)}"')
+                elif val:
+                    out.append(f'{k}="{val}"')
+                else:
+                    out.append(f'{k}=')
+            if "pretty" not in src_vm:
+                out.append(f'pretty="{dest_name}"')
+            new_port = get_next_ssh_port(self.vms_dir, dest_name)
+            out.append(f'ssh_port="{new_port}"')
+            dest_conf.write_text("\n".join(out) + "\n")
+            dest_conf.chmod(0o755)
+        except Exception as e:
+            self._warn(S["warn_clone_t"], S["warn_clone_conf"].format(e))
+            return
+
+        self._refresh()
+        flag = Path(self.vms_dir) / f".{dest_name}.copying"
+        flag.touch()
+
+        worker = CopyWorker(src_dir, dest_dir, flag)
+        worker.done.connect(lambda ok, err: (
+            notify("quickbox", S["ntf_clone_done"].format(dest_name)) if ok
+            else self._warn(S["warn_clone_t"], S["warn_clone_dir"].format(err)),
+            self._refresh()))
+        worker.start()
+
+    # ── delete / format ───────────────────────────────────────────────────────────
+    def _delete_disk(self, vm):
+        if not self._confirm(S["dlg_del_disk_t"], S["dlg_del_disk_b"].format(vm["_pretty"])):
+            return
+        try:
+            Path(vm["_disk"]).unlink()
+        except Exception:
+            pass
+        self._refresh()
+        self._show_panel(vm)
+
+    def _delete_vm(self, vm):
+        if not self._confirm(S["dlg_del_vm_t"].format(vm["_pretty"]), S["dlg_del_vm_b"]):
+            return
+        try:
+            shutil.rmtree(str(Path(self.vms_dir) / vm["_name"]), ignore_errors=True)
+            Path(vm["_conf"]).unlink(missing_ok=True)
+        except Exception:
+            pass
+        self.current_vm = None
+        self._refresh()
+        self._show_welcome()
+
+    def _dlg_format_disk(self, vm):
+        dlg = QDialog(self)
+        dlg.setWindowTitle(S["fmt_title"])
+        dlg.setWindowIcon(QIcon.fromTheme("qemu"))
+        dlg.resize(420, 300)
+        v = QVBoxLayout(dlg)
+        warn = QLabel(S["fmt_warn"])
+        warn.setStyleSheet("color:#c62828; font-weight:bold;")
+        v.addWidget(warn)
+
+        sg = QGridLayout()
+        sg.addWidget(QLabel(S["fmt_size_lbl"]), 0, 0)
+        size_spin = QSpinBox()
+        size_spin.setRange(1, 2000)
+        size_spin.setValue(int(vm.get("disk_size", "32G").rstrip("G") or "32"))
+        sg.addWidget(size_spin, 0, 1)
+        v.addLayout(sg)
+
+        v.addWidget(QLabel(S["fmt_layout_lbl"]))
+        layouts = [
+            ("gpt",  S["fmt_layout_gpt"]),
+            ("msd",  S["fmt_layout_msd"]),
+            ("fat",  S["fmt_layout_fat"]),
+            ("raw",  S["fmt_layout_raw"]),
+        ]
+        grp = QButtonGroup(dlg)
+        for i, (key, lbl) in enumerate(layouts):
+            rb = QRadioButton(lbl)
+            rb.setProperty("layout_key", key)
+            grp.addButton(rb)
+            v.addWidget(rb)
+            if i == 0:
+                rb.setChecked(True)
+
+        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        btns.button(QDialogButtonBox.StandardButton.Ok).setText(S["btn_format"])
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        v.addWidget(btns)
+
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        checked = grp.checkedButton()
+        layout  = checked.property("layout_key") if checked else "gpt"
+        size_gb = size_spin.value()
+        disk_path = vm["_disk"] or str(Path(self.vms_dir) / vm["_name"] / "disk.qcow2")
+        Path(disk_path).parent.mkdir(parents=True, exist_ok=True)
+
+        if not self._confirm(S["dlg_fmt_t"], S["dlg_fmt_b"].format(size_gb, layout)):
+            return
+
+        prog_dlg = self._progress_dialog(S["fmt_title"])
+        worker = FormatWorker(disk_path, size_gb, layout)
+        worker.status.connect(prog_dlg.setLabelText)
+        worker.done.connect(lambda ok, err: (
+            prog_dlg.close(),
+            notify("quickbox", S["ntf_fmt_done"].format(layout, size_gb)) if ok
+            else self._warn(S["warn_fmt_fail_t"], S["warn_fmt_fail_b"].format(err)),
+            self._refresh()))
+        worker.start()
+
+    # ── profile changed ───────────────────────────────────────────────────────────
+    def _on_profile_changed(self, combo, vm, desc_label, profile_ids):
+        pid = combo.currentData()
+        profile = PROFILES.get(pid, PROFILES["standard"])
+        desc_label.setText(profile["desc"])
+        setconf("vm_profile", pid, vm["_conf"])
+        for key in _PROFILE_KEYS:
+            remove_key(key, vm["_conf"])
+        for key, val in profile["settings"].items():
+            setconf(key, val, vm["_conf"])
+        vm["vm_profile"] = pid
+        for key in _PROFILE_KEYS:
+            vm.pop(key, None)
+        vm.update(profile["settings"])
+        self._show_panel(vm)
+
+    # ── download distro ───────────────────────────────────────────────────────────
+    def _parse_quickinst(self):
+        p = Path.home() / ".config/quickbox/quickinst.csv"
+        distros = []
+        if not p.exists():
+            return distros
+        try:
+            for line in p.read_text(encoding="utf-8").splitlines():
+                line = line.strip().strip('"')
+                if "," in line:
+                    parts = line.split('","')
+                    if len(parts) == 2:
+                        name = parts[0].strip('"')
+                        cmd  = parts[1].strip('"')
+                        distros.append((name, cmd))
+        except Exception:
+            pass
+        return sorted(distros, key=lambda x: x[0].lower())
+
+    def _dlg_download(self, *_):
+        distros = self._parse_quickinst()
+        dlg = QDialog(self)
+        dlg.setWindowTitle(S["dl_title"])
+        dlg.setWindowIcon(QIcon.fromTheme("qemu"))
+        dlg.resize(640, 520)
+        v = QVBoxLayout(dlg)
+
+        search = QLineEdit()
+        search.setPlaceholderText(S["dl_search_ph"])
+        v.addWidget(search)
+
+        h = QHBoxLayout()
+
+        # alphabet sidebar
+        from PySide6.QtWidgets import QScrollArea as _SA
+        alpha_scroll = _SA()
+        alpha_scroll.setWidgetResizable(True)
+        alpha_scroll.setFixedWidth(46)
+        alpha_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        alpha_w = QWidget()
+        alpha_v = QVBoxLayout(alpha_w)
+        alpha_v.setContentsMargins(2, 2, 2, 2)
+        alpha_v.setSpacing(1)
+        alpha_scroll.setWidget(alpha_w)
+        h.addWidget(alpha_scroll)
+
+        sep = make_sep(False)
+        h.addWidget(sep)
+
+        # distro list
+        dist_list = QListWidget()
+        dist_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        h.addWidget(dist_list, 1)
+        v.addLayout(h)
+
+        hint = QLabel(S["dl_hint2"])
+        hint.setStyleSheet("color:palette(mid); font-size:11px;")
+        v.addWidget(hint)
+
+        close_btn = QPushButton(S["btn_close"])
+        close_btn.clicked.connect(dlg.close)
+        v.addWidget(close_btn)
+
+        # populate
+        letter_rows = {}
+        all_items   = []
+        for name, cmd in distros:
+            first = name[0].upper() if name else "?"
+            if first not in letter_rows:
+                hdr_item = QListWidgetItem(f"── {first} ──")
+                hdr_item.setFlags(Qt.ItemFlag.NoItemFlags)
+                hdr_item.setForeground(QColor("gray"))
+                dist_list.addItem(hdr_item)
+                letter_rows[first] = hdr_item
+            item = QListWidgetItem(f"  {name}")
+            item.setData(Qt.ItemDataRole.UserRole, (name, cmd))
+            dist_list.addItem(item)
+            all_items.append((name, cmd, item))
+
+        # alphabet buttons
+        for letter in sorted(letter_rows.keys()):
+            btn = QPushButton(letter)
+            btn.setFlat(True)
+            btn.setFixedSize(34, 26)
+            def _jump(_, ltr=letter, lrows=letter_rows, dl=dist_list):
+                row = dl.row(lrows[ltr])
+                dl.scrollToItem(lrows[ltr])
+            btn.clicked.connect(_jump)
+            alpha_v.addWidget(btn)
+        alpha_v.addStretch()
+
+        def _filter(text):
+            t = text.strip().lower()
+            for name, cmd, item in all_items:
+                item.setHidden(bool(t) and t not in name.lower())
+            for letter, hdr in letter_rows.items():
+                any_visible = any(
+                    not item.isHidden()
+                    for n, c, item in all_items
+                    if n and n[0].upper() == letter)
+                hdr.setHidden(bool(t) and not any_visible)
+
+        search.textChanged.connect(_filter)
+
+        def _on_activate(item):
+            data = item.data(Qt.ItemDataRole.UserRole)
+            if data:
+                name, cmd = data
+                dlg.close()
+                self._dlg_do_download(name, cmd, distros)
+
+        dist_list.itemDoubleClicked.connect(_on_activate)
+        dist_list.itemActivated.connect(_on_activate)
+        dlg.exec()
+
+    def _dlg_do_download(self, distro_name, distro_cmd, distros):
+        cmd_parts  = distro_cmd.split()
+        base_distro = cmd_parts[1] if len(cmd_parts) > 1 else distro_name
+        versions = [(name, cmd) for name, cmd in distros
+                    if len(cmd.split()) > 1 and cmd.split()[1].lower() == base_distro.lower()]
+        if not versions:
+            versions = [(distro_name, distro_cmd)]
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Download — {base_distro}")
+        dlg.setWindowIcon(QIcon.fromTheme("qemu"))
+        dlg.resize(560, 320)
+        v = QVBoxLayout(dlg)
+
+        title = QLabel(f"<b><span style='font-size:15px'>{html.escape(base_distro.title())}</span></b>")
+        title.setTextFormat(Qt.TextFormat.RichText)
+        v.addWidget(title)
+        v.addWidget(make_sep())
+
+        vl = QLabel(S["dl2_ver_lbl"])
+        vl.setStyleSheet("color:palette(mid);")
+        v.addWidget(vl)
+        ver_combo = QComboBox()
+        for name, _ in versions:
+            ver_combo.addItem(name)
+        default_idx = next((i for i, (n, _) in enumerate(versions) if n == distro_name), 0)
+        ver_combo.setCurrentIndex(default_idx)
+        v.addWidget(ver_combo)
+
+        cmd_lbl = QLabel(S["dl2_cmd_lbl"])
+        cmd_lbl.setStyleSheet("color:palette(mid);")
+        v.addWidget(cmd_lbl)
+        cmd_entry = QLineEdit(versions[default_idx][1])
+        cmd_entry.setReadOnly(True)
+        ver_combo.currentIndexChanged.connect(lambda i: cmd_entry.setText(versions[i][1]))
+        v.addWidget(cmd_entry)
+        v.addWidget(make_sep())
+
+        progress = QProgressBar()
+        progress.setRange(0, 1000)
+        progress.setValue(0)
+        progress.setFormat(S["dl2_ready"])
+        progress.setTextVisible(True)
+        v.addWidget(progress)
+
+        note = QLabel(S["dl2_note"])
+        note.setStyleSheet("color:palette(mid); font-size:11px;")
+        v.addWidget(note)
+
+        btn_row = QWidget()
+        br = QHBoxLayout(btn_row)
+        cancel_btn = QPushButton(S["btn_cancel"])
+        dl_btn     = QPushButton(S["btn_download"])
+        dl_btn.setStyleSheet("background:#1565c0;color:white;border-radius:5px;padding:5px 14px;font-weight:bold;")
+        br.addStretch()
+        br.addWidget(cancel_btn)
+        br.addWidget(dl_btn)
+        v.addWidget(btn_row)
+
+        self._dl_worker = None
+        t0 = [0.0]
+
+        def _on_progress(text, frac):
+            progress.setValue(int(frac * 1000))
+            progress.setFormat(text)
+
+        def _on_done(ok):
+            import time
+            elapsed = time.monotonic() - t0[0]
+            m, s = divmod(int(elapsed), 60)
+            dur = f"{m}m {s}s" if m else f"{s}s"
+            if ok:
+                note.setText(f"Downloaded in {dur}")
+                dl_btn.setText(S["dl2_done_close"])
+            else:
+                dl_btn.setText(S["btn_close"])
+            dl_btn.setEnabled(True)
+            cancel_btn.setEnabled(False)
+            self._refresh()
+
+        def _start():
+            import time
+            t0[0] = time.monotonic()
+            cmd = cmd_entry.text().strip().split()
+            dl_btn.setEnabled(False)
+            ver_combo.setEnabled(False)
+            self._dl_worker = DownloadWorker(cmd, self.vms_dir)
+            self._dl_worker.progress.connect(_on_progress)
+            self._dl_worker.done.connect(_on_done)
+            self._dl_worker.start()
+
+        def _cancel():
+            if self._dl_worker:
+                self._dl_worker.cancel()
+            dlg.close()
+
+        dl_btn.clicked.connect(lambda: dlg.close() if dl_btn.text() in (S["dl2_done_close"], S["btn_close"]) else _start())
+        cancel_btn.clicked.connect(_cancel)
+        dlg.finished.connect(_cancel)
+        dlg.exec()
+
+    # ── custom VM ─────────────────────────────────────────────────────────────────
+    def _dlg_custom(self, *_):
+        src_path, _ = QFileDialog.getOpenFileName(
+            self, S["cvm_file_title"], str(Path.home()),
+            "Disk images (*.iso *.img)")
+        if not src_path:
+            return
+        src_path = Path(src_path)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(S["cvm_title"])
+        dlg.setWindowIcon(QIcon.fromTheme("qemu"))
+        dlg.resize(380, 150)
+        v = QVBoxLayout(dlg)
+        v.addWidget(QLabel(S["cvm_name_lbl"]))
+        name_entry = QLineEdit(src_path.stem.replace(" ", "-"))
+        v.addWidget(name_entry)
+        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        btns.button(QDialogButtonBox.StandardButton.Ok).setText(S["btn_next"])
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        v.addWidget(btns)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        vm_name = name_entry.text().strip().replace(" ", "-")
+        if not vm_name:
+            return
+
+        dest_name = vm_name
+        dest_conf = Path(self.vms_dir) / f"{dest_name}.conf"
+        dest_dir  = Path(self.vms_dir) / dest_name
+        if dest_conf.exists():
+            self._warn(S["warn_exists_t"], S["warn_exists_b"].format(dest_name))
+            return
+
+        ssh_port = get_next_ssh_port(self.vms_dir, dest_name)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        is_img = src_path.suffix.lower() == ".img"
+
+        flag = Path(self.vms_dir) / f".{dest_name}.copying"
+        flag.write_text(str(src_path.stat().st_size))
+        self._refresh()
+
+        if is_img:
+            disk = str(dest_dir / "disk.qcow2")
+            conf_text = (f"#!/usr/bin/quickemu --vm\nguest_os=\"linux\"\n"
+                         f"disk_img=\"{dest_name}/disk.qcow2\"\n"
+                         f"pretty=\"{vm_name}\"\nssh_port=\"{ssh_port}\"\n"
+                         f"boot=legacy\ncompat_mode=true\ndisk_if=ide\nnet_device=e1000\n")
+            dest_conf.write_text(conf_text)
+            dest_conf.chmod(0o755)
+            notify("quickbox", S["ntf_converting"].format(src_path.name), "low")
+            worker = ConvertWorker(str(src_path), disk)
+            worker.done.connect(lambda ok, err: (
+                flag.unlink(missing_ok=True),
+                notify("quickbox", f"VM {vm_name} created!") if ok
+                else self._warn("Conversion failed", err),
+                self._refresh()))
+            worker.start()
+        else:
+            dest_iso = dest_dir / src_path.name
+            conf_text = (f"#!/usr/bin/quickemu --vm\nguest_os=\"linux\"\n"
+                         f"disk_img=\"{dest_name}/disk.qcow2\"\n"
+                         f"iso=\"{dest_name}/{src_path.name}\"\n"
+                         f"pretty=\"{vm_name}\"\nssh_port=\"{ssh_port}\"\n")
+            dest_conf.write_text(conf_text)
+            dest_conf.chmod(0o755)
+            notify("quickbox", S["ntf_copying"].format(src_path.name), "low")
+            worker = CopyWorker(src_path, dest_iso, flag)
+            worker.done.connect(lambda ok, err: (
+                notify("quickbox", f"VM {vm_name} created!") if ok
+                else self._warn("Copy failed", err),
+                self._refresh()))
+            worker.start()
+
+    # ── advanced ──────────────────────────────────────────────────────────────────
+    def _dlg_advanced(self, *_):
+        dlg = QDialog(self)
+        dlg.setWindowTitle(S["adv_title"])
+        dlg.setWindowIcon(QIcon.fromTheme("qemu"))
+        dlg.resize(520, 500)
+        v = QVBoxLayout(dlg)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        content = QWidget()
+        cv = QVBoxLayout(content)
+        cv.setSpacing(6)
+        scroll.setWidget(content)
+        v.addWidget(scroll)
+
+        # current dir
+        cv.addWidget(make_section(S["adv_sec_loc"]))
+        cur_lbl = QLabel(f"<b>{S['adv_cur_dir']}</b> {html.escape(self.vms_dir)}")
+        cur_lbl.setTextFormat(Qt.TextFormat.RichText)
+        cur_lbl.setWordWrap(True)
+        cv.addWidget(cur_lbl)
+
+        mig_btn = QPushButton(S["adv_migrate"])
+        mig_btn.clicked.connect(lambda: (dlg.close(), self._dlg_migrate()))
+        cv.addWidget(mig_btn)
+
+        add_btn = QPushButton(S["adv_add_loc"])
+        def _add_loc():
+            d = QFileDialog.getExistingDirectory(self, S["adv_add_loc"], str(Path.home()))
+            if not d or d == self.vms_dir:
+                self._warn(S["warn_same_loc_t"], S["warn_same_loc_b"])
+                return
+            conf = read_conf()
+            used = [conf.get(f"vms_dir_{i}", "") for i in range(1, 6)]
+            if d in used:
+                return
+            empty = next((i for i in range(1, 6) if not conf.get(f"vms_dir_{i}", "")), None)
+            if not empty:
+                self._warn(S["warn_list_full_t"], S["warn_list_full_b"])
+                return
+            setconf(f"vms_dir_{empty}", d)
+            self.conf[f"vms_dir_{empty}"] = d
+            self._refresh_loc_list(loc_list_w, dlg)
+        add_btn.clicked.connect(_add_loc)
+        cv.addWidget(add_btn)
+
+        cv.addWidget(make_section(S["adv_sec_saved"]))
+        loc_list_w = QWidget()
+        cv.addWidget(loc_list_w)
+        self._refresh_loc_list(loc_list_w, dlg)
+
+        cv.addWidget(make_sep())
+        cv.addWidget(make_section(S["adv_sec_distro"]))
+        upd_btn = QPushButton(S["adv_update_dl"])
+        upd_hint = QLabel(S["adv_update_hint"])
+        upd_hint.setStyleSheet("color:palette(mid); font-size:11px;")
+        upd_hint.setWordWrap(True)
+        def _update_distros():
+            upd_btn.setEnabled(False)
+            upd_btn.setText(S["distro_updating"])
+            worker = UpdateDistroWorker()
+            worker.done.connect(lambda ok: (
+                upd_btn.setEnabled(True),
+                upd_btn.setText(S["adv_update_dl"])))
+            worker.start()
+        upd_btn.clicked.connect(_update_distros)
+        cv.addWidget(upd_btn)
+        cv.addWidget(upd_hint)
+
+        cv.addWidget(make_sep())
+        cv.addWidget(make_section(S["adv_sec_prof"]))
+        open_prof_btn = QPushButton(S["adv_open_prof"])
+        open_prof_btn.clicked.connect(lambda: subprocess.Popen(["xdg-open", str(PROFILES_DIR)]))
+        cv.addWidget(open_prof_btn)
+        reset_btn = QPushButton(S["adv_reset_prof"])
+        reset_btn.setToolTip(S["tt_reset_prof"])
+        def _reset_profiles():
+            for name, content in DEFAULT_PROFILES.items():
+                (PROFILES_DIR / name).write_text(content)
+            notify("quickbox", S["ntf_prof_reset"])
+        reset_btn.clicked.connect(_reset_profiles)
+        cv.addWidget(reset_btn)
+        prof_info = QLabel(S["adv_prof_hint"].format(str(PROFILES_DIR)))
+        prof_info.setStyleSheet("color:palette(mid); font-size:11px;")
+        prof_info.setWordWrap(True)
+        cv.addWidget(prof_info)
+        cv.addStretch()
+
+        close_btn = QPushButton(S["btn_close"])
+        close_btn.clicked.connect(dlg.close)
+        v.addWidget(close_btn)
+        dlg.exec()
+
+    def _refresh_loc_list(self, container, dlg):
+        # Clear and rebuild the saved locations list widget
+        while container.layout() and container.layout().count():
+            item = container.layout().takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        if not container.layout():
+            QVBoxLayout(container)
+
+        conf = read_conf()
+        found = False
+        for i in range(1, 6):
+            loc = conf.get(f"vms_dir_{i}", "")
+            if not loc:
+                continue
+            found = True
+            is_cur = (loc == self.vms_dir)
+            row = QWidget()
+            rl  = QHBoxLayout(row)
+            rl.setContentsMargins(0, 2, 0, 2)
+
+            lbl = QLabel()
+            if is_cur:
+                lbl.setText(f'<span style="color:#4caf50">✓</span>  {html.escape(loc)}')
+            else:
+                lbl.setText(f'     {html.escape(loc)}')
+            lbl.setTextFormat(Qt.TextFormat.RichText)
+            lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+            rl.addWidget(lbl)
+
+            op_btn = QPushButton(S["btn_open_loc"])
+            op_btn.setFixedWidth(60)
+            op_btn.clicked.connect(lambda _, l=loc: subprocess.Popen(["xdg-open", l]))
+            rl.addWidget(op_btn)
+
+            rm_btn = QPushButton(S["btn_remove"])
+            rm_btn.setFixedWidth(70)
+            rm_btn.clicked.connect(lambda _, idx=i, c=container, d=dlg: (
+                remove_key(f"vms_dir_{idx}", CONFIG_FILE),
+                self.conf.pop(f"vms_dir_{idx}", None),
+                self._refresh_loc_list(c, d)))
+            rl.addWidget(rm_btn)
+
+            sw_btn = QPushButton(S["btn_switch"])
+            sw_btn.setFixedWidth(70)
+            sw_btn.setEnabled(not is_cur)
+            sw_btn.clicked.connect(lambda _, l=loc, d=dlg: self._switch_loc(l, d))
+            rl.addWidget(sw_btn)
+            container.layout().addWidget(row)
+
+        if not found:
+            nl = QLabel(S["adv_no_locs"])
+            nl.setStyleSheet("color:palette(mid);")
+            container.layout().addWidget(nl)
+
+    def _switch_loc(self, loc, dlg):
+        self.vms_dir = loc
+        setconf("vms_dir", loc)
+        self.conf["vms_dir"] = loc
+        self.current_vm = None
+        dlg.close()
+        self._refresh()
+        self._show_welcome()
+
+    # ── migrate ───────────────────────────────────────────────────────────────────
+    def _dlg_migrate(self):
+        if not self.vms:
+            self._warn(S["warn_no_vms_t"], S["warn_no_vms_b"])
+            return
+        dlg = QDialog(self)
+        dlg.setWindowTitle(S["mig_title"])
+        dlg.setWindowIcon(QIcon.fromTheme("qemu"))
+        dlg.resize(480, 400)
+        v = QVBoxLayout(dlg)
+        v.addWidget(QLabel(S["mig_hint"]))
+
+        all_btn = QPushButton(S["mig_all"])
+        none_btn = QPushButton(S["mig_none"])
+        hr = QHBoxLayout()
+        hr.addWidget(all_btn); hr.addWidget(none_btn); hr.addStretch()
+        v.addLayout(hr)
+
+        checks = []
+        for vm in self.vms:
+            cb = QCheckBox(vm["_pretty"])
+            cb.setProperty("vm", vm)
+            checks.append(cb)
+            v.addWidget(cb)
+
+        all_btn.clicked.connect(lambda: [c.setChecked(True) for c in checks])
+        none_btn.clicked.connect(lambda: [c.setChecked(False) for c in checks])
+
+        pick_btn = QPushButton(S["btn_pick_dest"])
+        v.addWidget(pick_btn)
+        dest_lbl = QLabel("")
+        dest_lbl.setStyleSheet("color:palette(mid);")
+        v.addWidget(dest_lbl)
+        dest = [None]
+
+        def _pick():
+            d = QFileDialog.getExistingDirectory(self, S["btn_pick_dest"], str(Path.home()))
+            if d:
+                dest[0] = d
+                dest_lbl.setText(d)
+        pick_btn.clicked.connect(_pick)
+
+        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        v.addWidget(btns)
+
+        if dlg.exec() != QDialog.DialogCode.Accepted or not dest[0]:
+            return
+        if dest[0] == self.vms_dir:
+            self._warn(S["warn_same_loc_t"], S["warn_same_loc_b"])
+            return
+
+        selected = [c.property("vm") for c in checks if c.isChecked()]
+        if not selected:
+            return
+
+        if not self._confirm(S["dlg_migrate_t"],
+                             S["dlg_migrate_b"].format(len(selected), dest[0])):
+            return
+
+        prog = self._progress_dialog(S["mig_title"])
+
+        def _do_migrate():
+            ok = True
+            for vm in selected:
+                src = Path(self.vms_dir) / vm["_name"]
+                dst = Path(dest[0]) / vm["_name"]
+                dst_conf = Path(dest[0]) / f"{vm['_name']}.conf"
+                try:
+                    shutil.copytree(str(src), str(dst))
+                    shutil.copy2(vm["_conf"], str(dst_conf))
+                except Exception:
+                    ok = False
+            QMetaObject.invokeMethod(prog, "close", Qt.ConnectionType.QueuedConnection)
+            if ok:
+                QMetaObject.invokeMethod(self, "_ask_delete_originals",
+                                         Qt.ConnectionType.QueuedConnection,
+                                         Q_ARG(object, selected),
+                                         Q_ARG(str, dest[0]))
+            else:
+                QMetaObject.invokeMethod(self, "_warn_migration_failed",
+                                         Qt.ConnectionType.QueuedConnection)
+
+        threading.Thread(target=_do_migrate, daemon=True).start()
+
+    def _ask_delete_originals(self, selected, dest):
+        r = QMessageBox.question(self, S["dlg_danger_t"],
+            S["dlg_danger_b"].format(len(selected), self.vms_dir),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if r == QMessageBox.StandardButton.Yes:
+            for vm in selected:
+                shutil.rmtree(str(Path(self.vms_dir) / vm["_name"]), ignore_errors=True)
+                Path(vm["_conf"]).unlink(missing_ok=True)
+        self._refresh()
+
+    def _warn_migration_failed(self):
+        self._warn(S["warn_mig_fail_t"], S["warn_mig_fail_b"])
+
+    # ── helpers ───────────────────────────────────────────────────────────────────
+    def _confirm(self, title, body):
+        r = QMessageBox.question(self, title, body,
+                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        return r == QMessageBox.StandardButton.Yes
+
+    def _warn(self, title, body):
+        QMessageBox.warning(self, title, body)
+
+    def _progress_dialog(self, title):
+        from PySide6.QtWidgets import QProgressDialog
+        pd = QProgressDialog(S["prog_wait"], None, 0, 0, self)
+        pd.setWindowTitle(title)
+        pd.setWindowModality(Qt.WindowModality.ApplicationModal)
+        pd.setMinimumDuration(0)
+        pd.setValue(0)
+        pd.show()
+        QApplication.processEvents()
+        return pd
+
+    def _select_vm_by_name(self, name):
+        for i in range(self._list.count()):
+            vm = self._list.item(i).data(Qt.ItemDataRole.UserRole)
+            if vm and vm["_name"] == name:
+                self._list.setCurrentRow(i)
+                break
+
+
+# ── application entry ──────────────────────────────────────────────────────────
+class QuickboxApp(QApplication):
+    def __init__(self, argv):
+        super().__init__(argv)
+        self.setApplicationName("Quickbox")
+        self.setApplicationVersion(VERSION)
+        self.setStyleSheet(APP_STYLE)
+
+
+def main():
+    app = QuickboxApp(sys.argv)
+    win = QuickboxWindow()
+    win.show()
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

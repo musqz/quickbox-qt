@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Quickbox
+Comment=Qt6 GUI for quickemu
+Exec=quickbox
+Icon=qemu
+Terminal=false
+Type=Application
+Categories=System;Emulator;
+Keywords=vm;virtual;machine;quickemu;qemu;
