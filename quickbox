@@ -1355,14 +1355,25 @@ class QuickboxWindow(QMainWindow):
         if not quiet:
             notify("quickbox", S["ntf_launching"].format(vmname), "low")
         setconf("snap_dirty", "true", conf_path)
-        QTimer.singleShot(3000, self._refresh)
+        self._poll_vm_state(vmname, want_running=True)
 
     def _stop_vm(self, vm):
         try:
             subprocess.run(["pkill", "-TERM", "-f", f"name {vm['_name']},process={vm['_name']}"])
         except Exception:
             pass
-        QTimer.singleShot(2000, self._refresh)
+        self._poll_vm_state(vm["_name"], want_running=False)
+
+    def _poll_vm_state(self, vmname, want_running, _attempts=20):
+        if is_running(vmname) == want_running:
+            self._refresh()
+            if self.current_vm and self.current_vm["_name"] == vmname:
+                fresh = next((v for v in self.vms if v["_name"] == vmname), None)
+                if fresh:
+                    self._show_panel(fresh)
+            return
+        if _attempts > 0:
+            QTimer.singleShot(500, lambda: self._poll_vm_state(vmname, want_running, _attempts - 1))
 
     # ── snapshots ─────────────────────────────────────────────────────────────────
     def _snap_create(self, vm):
