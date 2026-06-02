@@ -194,6 +194,7 @@ S = {
     "warn_dup_snap_t": "Duplicate tag", "warn_dup_snap_b": "Snapshot '{}' already exists.",
     "warn_snap_running_b": "Stop the VM before creating a snapshot.",
     "warn_snap_fail_t": "Snapshot failed",
+    "warn_snap_locked": "The disk is locked by another process.\nStop the VM first, then try again.",
     "warn_fmt_fail_t": "Format failed", "warn_fmt_fail_b": "Command failed: {}",
     "warn_mig_fail_t": "Migration failed", "warn_mig_fail_b": "rsync returned an error.",
     "warn_no_vms_t": "No VMs", "warn_no_vms_b": "There are no VMs in the current location.",
@@ -1382,7 +1383,8 @@ class QuickboxWindow(QMainWindow):
         worker = SnapWorker("delete", vm["_disk"], tag)
         worker.done.connect(lambda ok, err, v=vm: (
             notify("quickbox", S["ntf_snap_applied"].format(tag)) if ok else
-            self._warn(S["warn_snap_fail_t"], err),
+            self._warn(S["warn_snap_fail_t"],
+                       S["warn_snap_locked"] if ("write" in err.lower() or "lock" in err.lower()) else err),
             self._show_panel(v)))
         self._track_worker(worker)
         worker.start()
@@ -1452,7 +1454,8 @@ class QuickboxWindow(QMainWindow):
             if action == "create":
                 notify("quickbox", S["ntf_snap_created"].format(tag))
         else:
-            self._warn(S["warn_snap_fail_t"], err)
+            msg = S["warn_snap_locked"] if ("write" in err.lower() or "lock" in err.lower()) else err
+            self._warn(S["warn_snap_fail_t"], msg)
         self._show_panel(vm)
 
     # helper slot for cross-thread panel refresh
