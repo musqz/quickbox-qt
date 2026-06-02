@@ -1034,7 +1034,10 @@ class QuickboxWindow(QMainWindow):
 
     def _track_worker(self, worker):
         self._active_workers.add(worker)
-        worker.finished.connect(lambda: self._active_workers.discard(worker))
+        worker.finished.connect(
+            lambda: self._active_workers.discard(worker),
+            Qt.ConnectionType.QueuedConnection
+        )
 
     # ── detail panel ─────────────────────────────────────────────────────────────
     def _show_panel(self, vm):
