@@ -470,7 +470,12 @@ class CopyWorker(QThread):
 
     def run(self):
         try:
-            shutil.copytree(str(self.src), str(self.dst))
+            src = Path(self.src)
+            if src.is_file():
+                Path(self.dst).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(str(src), str(self.dst))
+            else:
+                shutil.copytree(str(src), str(self.dst))
             Path(self.flag).unlink(missing_ok=True)
             self.done.emit(True, "")
         except Exception as e:
