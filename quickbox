@@ -1823,6 +1823,7 @@ class QuickboxWindow(QMainWindow):
 
         self._dl_worker = None
         t0 = [0.0]
+        _dl_ok = [False]
 
         def _on_progress(text, frac):
             progress.setValue(int(frac * 1000))
@@ -1833,6 +1834,7 @@ class QuickboxWindow(QMainWindow):
             elapsed = time.monotonic() - t0[0]
             m, s = divmod(int(elapsed), 60)
             dur = f"{m}m {s}s" if m else f"{s}s"
+            _dl_ok[0] = ok
             if ok:
                 note.setText(f"Downloaded in {dur}")
                 dl_btn.setText(S["dl2_done_close"])
@@ -1858,7 +1860,24 @@ class QuickboxWindow(QMainWindow):
                 self._dl_worker.cancel()
             dlg.close()
 
-        dl_btn.clicked.connect(lambda: dlg.close() if dl_btn.text() in (S["dl2_done_close"], S["btn_close"]) else _start())
+        def _close_and_select():
+            dlg.close()
+            if _dl_ok[0]:
+                try:
+                    confs = sorted(Path(self.vms_dir).glob("*.conf"),
+                                   key=lambda p: p.stat().st_mtime, reverse=True)
+                    if confs:
+                        newest = confs[0].stem
+                        for i in range(self._list.count()):
+                            vm = self._list.item(i).data(Qt.ItemDataRole.UserRole)
+                            if vm and vm["_name"] == newest:
+                                self._list.setCurrentRow(i)
+                                self._show_panel(vm)
+                                break
+                except Exception:
+                    pass
+
+        dl_btn.clicked.connect(lambda: _close_and_select() if dl_btn.text() in (S["dl2_done_close"], S["btn_close"]) else _start())
         cancel_btn.clicked.connect(_cancel)
         dlg.finished.connect(_cancel)
         dlg.exec()
