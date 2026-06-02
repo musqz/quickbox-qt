@@ -831,6 +831,17 @@ class QuickboxWindow(QMainWindow):
             tb.addWidget(btn)
             self._hdr_btns.append(btn)
 
+        # push ? to the right
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        tb.addWidget(spacer)
+        help_btn = QPushButton("?")
+        help_btn.setFixedWidth(28)
+        help_btn.setToolTip("Keyboard shortcuts")
+        help_btn.setShortcut(QKeySequence("F1"))
+        help_btn.clicked.connect(self._dlg_hotkeys)
+        tb.addWidget(help_btn)
+
         self.addToolBar(tb)
 
         # splitter
@@ -2322,6 +2333,50 @@ class QuickboxWindow(QMainWindow):
 
     def _warn_migration_failed(self):
         self._warn(S["warn_mig_fail_t"], S["warn_mig_fail_b"])
+
+    # ── hotkeys help ─────────────────────────────────────────────────────────────
+    def _dlg_hotkeys(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Keyboard shortcuts")
+        dlg.setWindowIcon(QIcon.fromTheme("qemu"))
+        dlg.resize(360, 300)
+        v = QVBoxLayout(dlg)
+
+        rows = [
+            ("Ctrl+L  /  /",    "Focus VM search"),
+            ("Escape",          "Clear search / back to list"),
+            ("↑ / ↓",           "Navigate VM list"),
+            ("Enter",           "Launch VM  (or Stop if running)"),
+            ("",                ""),
+            ("Ctrl+D",          "Download dialog"),
+            ("Ctrl+N",          "Custom VM dialog"),
+            ("Ctrl+,",          "Advanced dialog"),
+            ("",                ""),
+            ("F5  /  Ctrl+R",   "Refresh"),
+            ("F1",              "This help"),
+        ]
+
+        grid = QWidget()
+        gl = QGridLayout(grid)
+        gl.setColumnStretch(1, 1)
+        gl.setHorizontalSpacing(20)
+        gl.setVerticalSpacing(4)
+        for i, (key, desc) in enumerate(rows):
+            if not key:
+                gl.addWidget(make_sep(), i, 0, 1, 2)
+                continue
+            key_lbl = QLabel(key)
+            key_lbl.setStyleSheet("font-family: monospace; font-weight: bold;")
+            gl.addWidget(key_lbl, i, 0)
+            gl.addWidget(QLabel(desc), i, 1)
+        v.addWidget(grid)
+        v.addStretch()
+
+        close_btn = QPushButton(S["btn_close"])
+        close_btn.clicked.connect(dlg.close)
+        close_btn.setDefault(True)
+        v.addWidget(close_btn)
+        dlg.exec()
 
     # ── helpers ───────────────────────────────────────────────────────────────────
     def _confirm(self, title, body):
