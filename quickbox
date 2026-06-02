@@ -627,7 +627,7 @@ class DownloadWorker(QThread):
 
 
 class UpdateDistroWorker(QThread):
-    done = Signal(bool)
+    done = Signal(bool, str)   # (ok, message)
     def run(self):
         try:
             r = subprocess.run(["quickget", "--list-csv"], capture_output=True, text=True, timeout=60)
@@ -635,11 +635,16 @@ class UpdateDistroWorker(QThread):
                 out_path = Path.home() / ".config/quickbox/quickinst.csv"
                 out_path.parent.mkdir(parents=True, exist_ok=True)
                 out_path.write_text(r.stdout, encoding="utf-8")
-                self.done.emit(True)
+                count = sum(1 for line in r.stdout.splitlines()[1:] if line.strip())
+                self.done.emit(True, f"✓ Updated — {count} distros")
             else:
-                self.done.emit(False)
-        except Exception:
-            self.done.emit(False)
+                self.done.emit(False, f"✗ quickget returned no data (exit {r.returncode})")
+        except FileNotFoundError:
+            self.done.emit(False, "✗ quickget not found — install quickemu")
+        except subprocess.TimeoutExpired:
+            self.done.emit(False, "✗ Timed out (>60s)")
+        except Exception as e:
+            self.done.emit(False, f"✗ {e}")
 
 
 # ── VM list item ───────────────────────────────────────────────────────────────
@@ -1632,7 +1637,8 @@ class QuickboxWindow(QMainWindow):
                     option  = row.get("Option", "").strip()
                     if not os_id or not release:
                         continue
-                    name = display + " " + release + (" " + option if option else "")
+                    suffix = (" " + option if option and option.lower() not in display.lower() else "")
+                    name = display + " " + release + suffix
                     cmd  = "quickget " + os_id + " " + release + (" " + option if option else "")
                     distros.append((name, cmd))
         except Exception:
@@ -1985,9 +1991,11 @@ class QuickboxWindow(QMainWindow):
             upd_btn.setEnabled(False)
             upd_btn.setText(S["distro_updating"])
             worker = UpdateDistroWorker()
-            worker.done.connect(lambda ok: (
-                upd_btn.setEnabled(True),
-                upd_btn.setText(S["adv_update_dl"])))
+            def _on_done(ok, msg):
+                upd_btn.setEnabled(True)
+                upd_btn.setText(S["adv_update_dl"])
+                notify("Quickbox", msg, "low" if ok else "critical")
+            worker.done.connect(_on_done)
             worker.start()
         upd_btn.clicked.connect(_update_distros)
         cv.addWidget(upd_btn)
