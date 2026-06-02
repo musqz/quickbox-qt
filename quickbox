@@ -819,14 +819,15 @@ class QuickboxWindow(QMainWindow):
         tb.addSeparator()
 
         self._hdr_btns = []
-        for label, tip, cb in [
-            (S["hdr_download"],  S["tt_download"],  self._dlg_download),
-            (S["hdr_custom_vm"], S["tt_custom_vm"], self._dlg_custom),
-            (S["hdr_advanced"],  S["tt_advanced"],  self._dlg_advanced),
+        for label, tip, cb, shortcut in [
+            (S["hdr_download"],  S["tt_download"],  self._dlg_download, "Ctrl+D"),
+            (S["hdr_custom_vm"], S["tt_custom_vm"], self._dlg_custom,   "Ctrl+N"),
+            (S["hdr_advanced"],  S["tt_advanced"],  self._dlg_advanced, "Ctrl+,"),
         ]:
             btn = QPushButton(label)
-            btn.setToolTip(tip)
+            btn.setToolTip(f"{tip}  ({shortcut})")
             btn.clicked.connect(cb)
+            btn.setShortcut(QKeySequence(shortcut))
             tb.addWidget(btn)
             self._hdr_btns.append(btn)
 
