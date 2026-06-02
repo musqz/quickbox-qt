@@ -407,16 +407,16 @@ QToolBar QPushButton:checked {
     color: palette(highlighted-text);
 }
 QListWidget { border: none; outline: none; }
-QListWidget::item { border-radius: 5px; margin: 1px 3px; padding: 4px; }
-QListWidget::item:selected { background-color: rgba(128,128,128,0.3); }
+QListWidget::item { border-radius: 5px; margin: 1px 3px; padding: 4px; color: palette(text); }
+QListWidget::item:selected { background-color: rgba(128,128,128,0.3); color: palette(text); }
 QListWidget::item:hover { background-color: rgba(128,128,128,0.15); }
 QPushButton.launch { background-color: #1565c0; color: white;
     border-radius: 6px; padding: 6px 16px; font-weight: bold; font-size: 13px; }
 QPushButton.launch:hover { background-color: #1976d2; }
 QPushButton.danger { color: #c62828; font-weight: bold; }
 QPushButton.danger:disabled { color: rgba(180,50,50,0.35); font-weight: normal; }
-QLabel.section { font-weight: bold; font-size: 11px; color: palette(mid); margin-top: 10px; }
-QLabel.dim { color: palette(mid); }
+QLabel.section { font-weight: bold; font-size: 11px; margin-top: 10px; }
+QLabel.dim { font-size: 11px; }
 QFrame.badge-running { background-color: #2e7d32; border-radius: 3px; }
 QFrame.import-progress { background-color: #e65100; border-radius: 3px; }
 QScrollBar:vertical { width: 8px; }
@@ -693,7 +693,7 @@ class VMItemWidget(QWidget):
                 layout.addWidget(badge)
 
             size_lbl = QLabel(vm["_size"])
-            size_lbl.setStyleSheet("color: palette(mid); font-size: 11px;")
+            size_lbl.setStyleSheet("font-size: 11px;")
             size_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             layout.addWidget(size_lbl)
 
@@ -701,7 +701,7 @@ class VMItemWidget(QWidget):
 # ── section header helper ──────────────────────────────────────────────────────
 def make_section(text):
     lbl = QLabel(text)
-    lbl.setStyleSheet("font-weight:bold; font-size:11px; color:palette(mid); margin-top:10px;")
+    lbl.setStyleSheet("font-weight:bold; font-size:11px; margin-top:10px;")
     return lbl
 
 
@@ -724,7 +724,7 @@ class SectionHeader(QWidget):
         layout.setSpacing(0)
 
         self.lbl = QLabel(text)
-        self.lbl.setStyleSheet("font-weight:bold; font-size:11px; color:palette(mid);")
+        self.lbl.setStyleSheet("font-weight:bold; font-size:11px;")
         layout.addWidget(self.lbl, 1)
 
         sep = QFrame()
@@ -736,7 +736,7 @@ class SectionHeader(QWidget):
 
         self.btn = QPushButton(S["btn_hide"] if expanded else S["btn_show"])
         self.btn.setFlat(True)
-        self.btn.setStyleSheet("font-size:11px; color:palette(mid); padding:0 2px;")
+        self.btn.setStyleSheet("font-size:11px; padding:0 2px;")
         self.btn.clicked.connect(self._toggle)
         layout.addWidget(self.btn)
 
@@ -875,7 +875,7 @@ class QuickboxWindow(QMainWindow):
         self._clear_right()
         lbl = QLabel(S["welcome"])
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl.setStyleSheet("color: palette(mid); font-size: 14px;")
+        lbl.setStyleSheet("font-size: 14px;")
         self._right_layout.addStretch()
         self._right_layout.addWidget(lbl, alignment=Qt.AlignmentFlag.AlignCenter)
         self._right_layout.addStretch()
@@ -1042,7 +1042,7 @@ class QuickboxWindow(QMainWindow):
         title.setTextFormat(Qt.TextFormat.RichText)
         self._right_layout.addWidget(title)
 
-        sub = QLabel(f"<span style='color:gray; font-size:11px'>{html.escape(vm['_name'])}  •  {vm['_size']}</span>")
+        sub = QLabel(f"<span style='font-size:11px'>{html.escape(vm['_name'])}  •  {vm['_size']}</span>")
         sub.setTextFormat(Qt.TextFormat.RichText)
         self._right_layout.addWidget(sub)
         self._right_layout.addWidget(make_sep())
@@ -1098,7 +1098,6 @@ class QuickboxWindow(QMainWindow):
         ]
         for row, (k, v) in enumerate(infos):
             kl = QLabel(k + ":")
-            kl.setStyleSheet("color:palette(mid);")
             kl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
             vl = QLabel(v)
             vl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -1123,7 +1122,6 @@ class QuickboxWindow(QMainWindow):
 
         # Profile
         pl = QLabel(S["set_profile"])
-        pl.setStyleSheet("color:palette(mid);")
         pl.setAlignment(Qt.AlignmentFlag.AlignRight)
         _profile_ids = list(PROFILES.keys())
         pc = QComboBox()
@@ -1133,7 +1131,7 @@ class QuickboxWindow(QMainWindow):
         pc.setCurrentIndex(_profile_ids.index(cur) if cur in _profile_ids else 0)
         pc.setEnabled(not read_only)
         profile_desc = QLabel()
-        profile_desc.setStyleSheet("color:palette(mid); font-size:11px;")
+        profile_desc.setStyleSheet("font-size:11px;")
         profile_desc.setWordWrap(True)
         profile_desc.setText(PROFILES.get(cur, PROFILES["standard"])["desc"])
         pc.currentIndexChanged.connect(lambda i, v=vm, d=profile_desc, ids=_profile_ids:
@@ -1144,7 +1142,6 @@ class QuickboxWindow(QMainWindow):
 
         # Compat mode
         cl = QLabel(S["set_compat"])
-        cl.setStyleSheet("color:palette(mid);")
         cl.setAlignment(Qt.AlignmentFlag.AlignRight)
         cs = QCheckBox()
         cs.setChecked(vm.get("compat_mode") == "true")
@@ -1153,7 +1150,7 @@ class QuickboxWindow(QMainWindow):
             setconf("compat_mode", "true" if v else "false", vm["_conf"]),
             vm.update({"compat_mode": "true" if v else "false"})))
         hint = QLabel(S["set_compat_hint"])
-        hint.setStyleSheet("color:palette(mid); font-size:11px;")
+        hint.setStyleSheet("font-size:11px;")
         hint.setWordWrap(True)
         sg.addWidget(cl, 2, 0)
         sg.addWidget(cs, 2, 1)
@@ -1161,7 +1158,6 @@ class QuickboxWindow(QMainWindow):
 
         # Boot mode
         bl = QLabel(S["set_boot"])
-        bl.setStyleSheet("color:palette(mid);")
         bl.setAlignment(Qt.AlignmentFlag.AlignRight)
         bc = QComboBox()
         bc.addItem(S["boot_uefi"], "uefi")
@@ -1191,7 +1187,6 @@ class QuickboxWindow(QMainWindow):
 
         if not vm["_has_disk"]:
             nl = QLabel(S["snap_no_disk"])
-            nl.setStyleSheet("color:palette(mid);")
             sv.addWidget(nl)
         else:
             snaps = get_snapshots(vm["_disk"])
@@ -1200,7 +1195,6 @@ class QuickboxWindow(QMainWindow):
 
             if not snaps:
                 nl = QLabel(S["snap_none"])
-                nl.setStyleSheet("color:palette(mid);")
                 sv.addWidget(nl)
             else:
                 for snap in snaps:
@@ -1269,7 +1263,6 @@ class QuickboxWindow(QMainWindow):
         tg.setHorizontalSpacing(8)
 
         ql = QLabel(S["set_quiet"] + ":")
-        ql.setStyleSheet("color:palette(mid);")
         qc = QCheckBox()
         qc.setChecked(vm.get("quiet_launch") == "true")
         qc.setEnabled(not read_only)
@@ -1277,7 +1270,7 @@ class QuickboxWindow(QMainWindow):
             setconf("quiet_launch", "true" if v else "false", vm["_conf"]),
             vm.update({"quiet_launch": "true" if v else "false"})))
         qn = QLabel(S["set_quiet_note"])
-        qn.setStyleSheet("color:palette(mid); font-size:11px;")
+        qn.setStyleSheet("font-size:11px;")
         tg.addWidget(ql, 0, 0)
         tg.addWidget(qc, 0, 1)
         tg.addWidget(qn, 0, 2)
@@ -1471,7 +1464,7 @@ class QuickboxWindow(QMainWindow):
         entry.setToolTip(S["clone_tt"])
         v.addWidget(entry)
         hint = QLabel(S["clone_hint"])
-        hint.setStyleSheet("color:palette(mid); font-size:11px;")
+        hint.setStyleSheet("font-size:11px;")
         v.addWidget(hint)
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         btns.button(QDialogButtonBox.StandardButton.Ok).setText(S["btn_clone"])
@@ -1685,7 +1678,7 @@ class QuickboxWindow(QMainWindow):
         v.addLayout(h)
 
         hint = QLabel(S["dl_hint2"])
-        hint.setStyleSheet("color:palette(mid); font-size:11px;")
+        hint.setStyleSheet("font-size:11px;")
         v.addWidget(hint)
 
         close_btn = QPushButton(S["btn_close"])
@@ -1700,7 +1693,6 @@ class QuickboxWindow(QMainWindow):
             if first not in letter_rows:
                 hdr_item = QListWidgetItem(f"── {first} ──")
                 hdr_item.setFlags(Qt.ItemFlag.NoItemFlags)
-                hdr_item.setForeground(QColor("gray"))
                 dist_list.addItem(hdr_item)
                 letter_rows[first] = hdr_item
             item = QListWidgetItem(f"  {name}")
@@ -1764,7 +1756,6 @@ class QuickboxWindow(QMainWindow):
         v.addWidget(make_sep())
 
         vl = QLabel(S["dl2_ver_lbl"])
-        vl.setStyleSheet("color:palette(mid);")
         v.addWidget(vl)
         ver_combo = QComboBox()
         for name, _ in versions:
@@ -1774,7 +1765,6 @@ class QuickboxWindow(QMainWindow):
         v.addWidget(ver_combo)
 
         cmd_lbl = QLabel(S["dl2_cmd_lbl"])
-        cmd_lbl.setStyleSheet("color:palette(mid);")
         v.addWidget(cmd_lbl)
         cmd_entry = QLineEdit(versions[default_idx][1])
         cmd_entry.setReadOnly(True)
@@ -1790,7 +1780,7 @@ class QuickboxWindow(QMainWindow):
         v.addWidget(progress)
 
         note = QLabel(S["dl2_note"])
-        note.setStyleSheet("color:palette(mid); font-size:11px;")
+        note.setStyleSheet("font-size:11px;")
         v.addWidget(note)
 
         btn_row = QWidget()
@@ -1978,7 +1968,7 @@ class QuickboxWindow(QMainWindow):
         cv.addWidget(make_section(S["adv_sec_distro"]))
         upd_btn = QPushButton(S["adv_update_dl"])
         upd_hint = QLabel(S["adv_update_hint"])
-        upd_hint.setStyleSheet("color:palette(mid); font-size:11px;")
+        upd_hint.setStyleSheet("font-size:11px;")
         upd_hint.setWordWrap(True)
         def _update_distros():
             upd_btn.setEnabled(False)
@@ -2006,7 +1996,7 @@ class QuickboxWindow(QMainWindow):
         reset_btn.clicked.connect(_reset_profiles)
         cv.addWidget(reset_btn)
         prof_info = QLabel(S["adv_prof_hint"].format(str(PROFILES_DIR)))
-        prof_info.setStyleSheet("color:palette(mid); font-size:11px;")
+        prof_info.setStyleSheet("font-size:11px;")
         prof_info.setWordWrap(True)
         cv.addWidget(prof_info)
         cv.addStretch()
@@ -2068,7 +2058,6 @@ class QuickboxWindow(QMainWindow):
 
         if not found:
             nl = QLabel(S["adv_no_locs"])
-            nl.setStyleSheet("color:palette(mid);")
             container.layout().addWidget(nl)
 
     def _switch_loc(self, loc, dlg):
@@ -2111,7 +2100,6 @@ class QuickboxWindow(QMainWindow):
         pick_btn = QPushButton(S["btn_pick_dest"])
         v.addWidget(pick_btn)
         dest_lbl = QLabel("")
-        dest_lbl.setStyleSheet("color:palette(mid);")
         v.addWidget(dest_lbl)
         dest = [None]
 
