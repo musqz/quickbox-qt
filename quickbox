@@ -651,8 +651,9 @@ class UpdateDistroWorker(QThread):
 class VMItemWidget(QWidget):
     def __init__(self, vm, parent=None):
         super().__init__(parent)
+        self.setMinimumHeight(38)
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 5, 8, 5)
+        layout.setContentsMargins(8, 6, 8, 8)
         layout.setSpacing(8)
 
         dot = QLabel()
@@ -894,7 +895,8 @@ class QuickboxWindow(QMainWindow):
                 continue
             item = QListWidgetItem()
             widget = VMItemWidget(vm)
-            item.setSizeHint(widget.sizeHint())
+            sh = widget.sizeHint()
+            item.setSizeHint(QSize(sh.width(), max(sh.height(), widget.minimumHeight())))
             item.setData(Qt.ItemDataRole.UserRole, vm)
             self._list.addItem(item)
             self._list.setItemWidget(item, widget)
