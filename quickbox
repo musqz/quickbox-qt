@@ -1391,7 +1391,7 @@ class QuickboxWindow(QMainWindow):
             notify("quickbox", S["ntf_snap_applied"].format(tag)) if ok else
             self._warn(S["warn_snap_fail_t"],
                        S["warn_snap_locked"] if ("write" in err.lower() or "lock" in err.lower()) else err),
-            self._show_panel(v)))
+            self._refresh_and_show(v)))
         self._track_worker(worker)
         worker.start()
 
@@ -1454,6 +1454,11 @@ class QuickboxWindow(QMainWindow):
 
         threading.Thread(target=_do_apply, daemon=True).start()
 
+    def _refresh_and_show(self, vm):
+        self._refresh()
+        fresh = next((v for v in self.vms if v["_name"] == vm["_name"]), vm)
+        self._show_panel(fresh)
+
     def _on_snap_done(self, ok, err, action, vm, tag):
         if ok:
             if action == "create":
@@ -1461,7 +1466,7 @@ class QuickboxWindow(QMainWindow):
         else:
             msg = S["warn_snap_locked"] if ("write" in err.lower() or "lock" in err.lower()) else err
             self._warn(S["warn_snap_fail_t"], msg)
-        self._show_panel(vm)
+        self._refresh_and_show(vm)
 
     # helper slot for cross-thread panel refresh
     def _refresh_panel(self, vm):
