@@ -72,7 +72,8 @@ S = {
     "welcome": "Select a VM from the list",
     "sec_launch": "LAUNCH", "sec_info": "INFO",
     "sec_settings": "SETTINGS", "sec_snapshots": "SNAPSHOTS",
-    "sec_actions": "ACTIONS | DANGER ZONE",
+    "sec_actions": "ACTIONS",
+    "sec_danger":  "DANGER ZONE",
     "vm_copying": "⏳ Importing…",
     "vm_running": "VM is running",
     "btn_stop": "Stop VM", "btn_launch": "Launch VM",
@@ -1273,7 +1274,6 @@ class QuickboxWindow(QMainWindow):
         av.setContentsMargins(0, 4, 0, 0)
         av.setSpacing(4)
 
-        # Toggles
         tog_row = QWidget()
         tg = QGridLayout(tog_row)
         tg.setContentsMargins(0, 0, 0, 0)
@@ -1294,7 +1294,6 @@ class QuickboxWindow(QMainWindow):
         tg.addWidget(qn, 0, 2)
         av.addWidget(tog_row)
 
-        # Action buttons
         btn_row = QWidget()
         br = QHBoxLayout(btn_row)
         br.setContentsMargins(0, 4, 0, 0)
@@ -1311,10 +1310,23 @@ class QuickboxWindow(QMainWindow):
         br.addStretch()
         av.addWidget(btn_row)
 
-        # Danger zone
+        acts_hdr.add_content(acts_w)
+        self._right_layout.addWidget(acts_w)
+
+        # ── Danger zone section ──
+        dng_hdr = SectionHeader(S["sec_danger"],
+                                self.conf.get("dng_expanded", "true") == "true",
+                                "dng_expanded", self.conf)
+        self._right_layout.addWidget(dng_hdr)
+
+        dng_w = QWidget()
+        dv = QVBoxLayout(dng_w)
+        dv.setContentsMargins(0, 4, 0, 0)
+        dv.setSpacing(4)
+
         dng_row = QWidget()
         dr = QHBoxLayout(dng_row)
-        dr.setContentsMargins(0, 4, 0, 0)
+        dr.setContentsMargins(0, 0, 0, 0)
         for lbl_key, tt_key, cb in [
             ("dng_del_disk", "tt_del_disk", lambda: self._delete_disk(vm)),
             ("dng_fmt_disk", "tt_fmt_disk", lambda: self._dlg_format_disk(vm)),
@@ -1327,10 +1339,10 @@ class QuickboxWindow(QMainWindow):
             btn.clicked.connect(cb)
             dr.addWidget(btn)
         dr.addStretch()
-        av.addWidget(dng_row)
+        dv.addWidget(dng_row)
 
-        acts_hdr.add_content(acts_w)
-        self._right_layout.addWidget(acts_w)
+        dng_hdr.add_content(dng_w)
+        self._right_layout.addWidget(dng_w)
         self._right_layout.addStretch()
 
     # ── launch / stop ─────────────────────────────────────────────────────────────
