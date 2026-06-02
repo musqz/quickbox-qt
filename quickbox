@@ -2338,10 +2338,16 @@ class QuickboxWindow(QMainWindow):
     # ── hotkeys help ─────────────────────────────────────────────────────────────
     def _dlg_hotkeys(self):
         dlg = QDialog(self)
-        dlg.setWindowTitle("Keyboard shortcuts")
+        dlg.setWindowTitle("Help — Quickbox")
         dlg.setWindowIcon(QIcon.fromTheme("qemu"))
-        dlg.resize(360, 300)
+        dlg.resize(380, 420)
         v = QVBoxLayout(dlg)
+        v.setSpacing(8)
+
+        # ── keyboard shortcuts ──
+        shortcuts_lbl = QLabel("Keyboard shortcuts")
+        shortcuts_lbl.setStyleSheet("font-weight:bold; font-size:13px;")
+        v.addWidget(shortcuts_lbl)
 
         rows = [
             ("Ctrl+L  /  /",    "Focus VM search"),
@@ -2371,6 +2377,27 @@ class QuickboxWindow(QMainWindow):
             gl.addWidget(key_lbl, i, 0)
             gl.addWidget(QLabel(desc), i, 1)
         v.addWidget(grid)
+
+        # ── about ──
+        v.addWidget(make_sep())
+
+        about_lbl = QLabel("About")
+        about_lbl.setStyleSheet("font-weight:bold; font-size:13px;")
+        v.addWidget(about_lbl)
+
+        about = QLabel(
+            f"<b>Quickbox</b> v{VERSION}<br>"
+            f"Qt6/PySide6 GUI front-end for quickemu<br><br>"
+            f"Created by <b>musqz</b><br>"
+            f"<a href='https://github.com/musqz/quickbox-qt'>"
+            f"github.com/musqz/quickbox-qt</a><br><br>"
+            f"MIT License"
+        )
+        about.setTextFormat(Qt.TextFormat.RichText)
+        about.setOpenExternalLinks(True)
+        about.setWordWrap(True)
+        v.addWidget(about)
+
         v.addStretch()
 
         close_btn = QPushButton(S["btn_close"])
