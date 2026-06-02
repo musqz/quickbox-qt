@@ -892,6 +892,7 @@ class QuickboxWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+L"), self).activated.connect(self._kb_focus_search)
         QShortcut(QKeySequence("/"),      self).activated.connect(self._kb_focus_search)
         QShortcut(QKeySequence("Escape"), self).activated.connect(self._kb_escape)
+        QShortcut(QKeySequence("?"),      self).activated.connect(self._dlg_hotkeys)
         self._list.itemActivated.connect(self._kb_list_enter)
 
         self._show_welcome()
@@ -2353,7 +2354,7 @@ class QuickboxWindow(QMainWindow):
             ("Ctrl+,",          "Advanced dialog"),
             ("",                ""),
             ("F5  /  Ctrl+R",   "Refresh"),
-            ("F1",              "This help"),
+            ("F1  /  ?",        "This help"),
         ]
 
         grid = QWidget()
