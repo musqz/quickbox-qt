@@ -45,7 +45,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import (
     Qt, QTimer, QThread, Signal, QSocketNotifier, QSize, QMetaObject,
 )
-from PySide6.QtGui import QIcon, QPixmap, QFont, QCursor, QColor, QKeySequence, QAction
+from PySide6.QtGui import QIcon, QPixmap, QFont, QCursor, QColor, QKeySequence, QAction, QShortcut
 
 # ── paths & config ─────────────────────────────────────────────────────────────
 CONFIG_FILE  = Path.home() / ".config/quickbox/quickbox.conf"
@@ -877,7 +877,6 @@ class QuickboxWindow(QMainWindow):
         self.setStatusBar(self._status)
 
         # keyboard shortcuts
-        from PySide6.QtWidgets import QShortcut
         QShortcut(QKeySequence("Ctrl+L"), self).activated.connect(self._kb_focus_search)
         QShortcut(QKeySequence("/"),      self).activated.connect(self._kb_focus_search)
         QShortcut(QKeySequence("Escape"), self).activated.connect(self._kb_escape)
