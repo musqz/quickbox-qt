@@ -10,10 +10,8 @@ depends=(
     'python'
     'pyside6'
     'quickemu'
-    'python-gobject'   # gi — used for GLib version guard
-)
-optdepends=(
-    'xdg-utils: open VM directory in file manager'
+    'rsync'
+    'xdg-utils'
 )
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
 sha256sums=('SKIP')
@@ -21,15 +19,13 @@ sha256sums=('SKIP')
 package() {
     cd "$srcdir/$pkgname-$pkgver"
 
-    install -Dm755 quickbox          "$pkgdir/usr/bin/quickbox"
-    install -Dm644 LICENSE           "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm755 quickbox        "$pkgdir/usr/bin/quickbox"
+    install -Dm644 LICENSE         "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 
-    # translations
     for f in translations/*.json; do
-        install -Dm644 "$f" "$pkgdir/usr/share/$pkgname/${f}"
+        install -Dm644 "$f" "$pkgdir/usr/share/$pkgname/$f"
     done
 
-    # desktop entry
-    install -Dm644 "$srcdir/$pkgname-$pkgver/pkg/quickbox-qt.desktop" \
+    install -Dm644 pkg/quickbox-qt.desktop \
         "$pkgdir/usr/share/applications/quickbox-qt.desktop"
 }
