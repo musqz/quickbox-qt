@@ -120,6 +120,7 @@ S = {
     "dl_title": "Download Distro",
     "dl_search_ph": "Search distros…",
     "dl_hint2": "Click a distro to select version and download",
+    "dl_no_list": "No distro list found.\nGo to Advanced → Update Distro List first.",
     "dl2_ver_lbl": "Version / edition:",
     "dl2_cmd_lbl": "Command:",
     "dl2_ready": "Ready to download",
@@ -629,18 +630,11 @@ class UpdateDistroWorker(QThread):
     done = Signal(bool)
     def run(self):
         try:
-            r = subprocess.run(["quickget", "--show-all"], capture_output=True, text=True, timeout=60)
-            if r.returncode == 0:
+            r = subprocess.run(["quickget", "--list-csv"], capture_output=True, text=True, timeout=60)
+            if r.returncode == 0 and r.stdout.strip():
                 out_path = Path.home() / ".config/quickbox/quickinst.csv"
                 out_path.parent.mkdir(parents=True, exist_ok=True)
-                lines = []
-                for line in r.stdout.splitlines():
-                    parts = line.strip().split()
-                    if len(parts) >= 2:
-                        name = " ".join(parts[:2]).title()
-                        cmd  = "quickget " + " ".join(parts)
-                        lines.append(f'"{name}","{cmd}"')
-                out_path.write_text("\n".join(lines) + "\n")
+                out_path.write_text(r.stdout, encoding="utf-8")
                 self.done.emit(True)
             else:
                 self.done.emit(False)
@@ -1624,25 +1618,42 @@ class QuickboxWindow(QMainWindow):
 
     # ── download distro ───────────────────────────────────────────────────────────
     def _parse_quickinst(self):
+        import csv as _csv
         p = Path.home() / ".config/quickbox/quickinst.csv"
         distros = []
         if not p.exists():
             return distros
         try:
-            for line in p.read_text(encoding="utf-8").splitlines():
-                line = line.strip().strip('"')
-                if "," in line:
-                    parts = line.split('","')
-                    if len(parts) == 2:
-                        name = parts[0].strip('"')
-                        cmd  = parts[1].strip('"')
-                        distros.append((name, cmd))
+            with open(p, encoding="utf-8", newline="") as f:
+                for row in _csv.DictReader(f):
+                    display = row.get("Display Name", "").strip()
+                    os_id   = row.get("OS", "").strip()
+                    release = row.get("Release", "").strip()
+                    option  = row.get("Option", "").strip()
+                    if not os_id or not release:
+                        continue
+                    name = display + " " + release + (" " + option if option else "")
+                    cmd  = "quickget " + os_id + " " + release + (" " + option if option else "")
+                    distros.append((name, cmd))
         except Exception:
             pass
         return sorted(distros, key=lambda x: x[0].lower())
 
     def _dlg_download(self, *_):
         distros = self._parse_quickinst()
+        if not distros:
+            dlg = QDialog(self)
+            dlg.setWindowTitle(S["dl_title"])
+            dlg.setWindowIcon(QIcon.fromTheme("qemu"))
+            dlg.resize(380, 110)
+            v = QVBoxLayout(dlg)
+            v.addWidget(QLabel(S["dl_no_list"]))
+            btn = QPushButton(S["btn_close"])
+            btn.clicked.connect(dlg.close)
+            v.addWidget(btn)
+            dlg.exec()
+            return
+
         dlg = QDialog(self)
         dlg.setWindowTitle(S["dl_title"])
         dlg.setWindowIcon(QIcon.fromTheme("qemu"))
