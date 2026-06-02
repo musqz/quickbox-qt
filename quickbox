@@ -1339,7 +1339,7 @@ class QuickboxWindow(QMainWindow):
         br = QHBoxLayout(btn_row)
         br.setContentsMargins(0, 4, 0, 0)
         for lbl_key, tt_key, cb in [
-            ("act_edit_conf", "tt_edit_conf", lambda: subprocess.Popen(["geany", vm["_conf"]])),
+            ("act_edit_conf", "tt_edit_conf", lambda: subprocess.Popen(["xdg-open", vm["_conf"]])),
             ("act_clone",     "tt_clone",     lambda: self._clone_vm(vm)),
             ("act_open_dir",  "tt_open_dir",  lambda: subprocess.Popen(["xdg-open", str(Path(self.vms_dir) / vm["_name"])])),
         ]:
