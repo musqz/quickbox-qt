@@ -1,5 +1,9 @@
 # quickbox-qt
 
+<p align="center">
+  <img src="icons/quickbox.png" width="128" alt="Quickbox icon"/>
+</p>
+
 > **Beta** — actively developed and tested. Not yet published to AUR or any distro repository. Feedback welcome.
 
 A Qt6/PySide6 GUI front-end for [quickemu](https://github.com/quickemu-project/quickemu).

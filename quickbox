@@ -369,7 +369,7 @@ def _date_tag(with_time=False):
 
 def notify(title, body, urgency="low"):
     try:
-        subprocess.Popen(["notify-send", "-i", "qemu", "-u", urgency, title, body])
+        subprocess.Popen(["notify-send", "-i", "quickbox", "-u", urgency, title, body])
     except Exception:
         pass
 
@@ -864,7 +864,7 @@ class QuickboxWindow(QMainWindow):
         self._t_dir     = QTimer(self); self._t_dir.timeout.connect(self._poll_vms_dir);        self._t_dir.start(4000)
         self._t_copy    = QTimer(self); self._t_copy.timeout.connect(self._poll_copying);       self._t_copy.start(2000)
 
-        self.setWindowIcon(QIcon.fromTheme("qemu"))
+        self.setWindowIcon(QIcon.fromTheme("quickbox"))
 
     # ── UI skeleton ─────────────────────────────────────────────────────────────
     def _build_ui(self):
@@ -1092,7 +1092,7 @@ class QuickboxWindow(QMainWindow):
 
     # ── systray ───────────────────────────────────────────────────────────────────
     def _build_tray(self):
-        self._tray = QSystemTrayIcon(QIcon.fromTheme("qemu"), self)
+        self._tray = QSystemTrayIcon(QIcon.fromTheme("quickbox"), self)
         menu = QMenu()
         show_act = QAction("Show / Hide", self)
         show_act.triggered.connect(self._tray_toggle)
@@ -1624,7 +1624,7 @@ class QuickboxWindow(QMainWindow):
 
         dlg = QDialog(self)
         dlg.setWindowTitle(S["dlg_snap_apply_t"].format(tag))
-        dlg.setWindowIcon(QIcon.fromTheme("qemu"))
+        dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(460, 200)
         v = QVBoxLayout(dlg)
 
@@ -1703,7 +1703,7 @@ class QuickboxWindow(QMainWindow):
         suggested = f"{vm['_name']}-{_date_tag()}"
         dlg = QDialog(self)
         dlg.setWindowTitle(S["clone_title"])
-        dlg.setWindowIcon(QIcon.fromTheme("qemu"))
+        dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(380, 150)
         v = QVBoxLayout(dlg)
         v.addWidget(QLabel(S["clone_label"].format(vm["_pretty"])))
@@ -1795,7 +1795,7 @@ class QuickboxWindow(QMainWindow):
     def _dlg_format_disk(self, vm):
         dlg = QDialog(self)
         dlg.setWindowTitle(S["fmt_title"])
-        dlg.setWindowIcon(QIcon.fromTheme("qemu"))
+        dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(420, 300)
         v = QVBoxLayout(dlg)
         warn = QLabel(S["fmt_warn"])
@@ -1900,7 +1900,7 @@ class QuickboxWindow(QMainWindow):
         if not distros:
             dlg = QDialog(self)
             dlg.setWindowTitle(S["dl_title"])
-            dlg.setWindowIcon(QIcon.fromTheme("qemu"))
+            dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
             dlg.resize(380, 110)
             v = QVBoxLayout(dlg)
             v.addWidget(QLabel(S["dl_no_list"]))
@@ -1913,7 +1913,7 @@ class QuickboxWindow(QMainWindow):
 
         dlg = QDialog(self)
         dlg.setWindowTitle(S["dl_title"])
-        dlg.setWindowIcon(QIcon.fromTheme("qemu"))
+        dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(640, 520)
         v = QVBoxLayout(dlg)
 
@@ -2065,7 +2065,7 @@ class QuickboxWindow(QMainWindow):
 
         dlg = QDialog(self)
         dlg.setWindowTitle(f"Download — {base_distro}")
-        dlg.setWindowIcon(QIcon.fromTheme("qemu"))
+        dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(560, 320)
         v = QVBoxLayout(dlg)
 
@@ -2209,7 +2209,7 @@ class QuickboxWindow(QMainWindow):
 
         dlg = QDialog(self)
         dlg.setWindowTitle(S["cvm_title"])
-        dlg.setWindowIcon(QIcon.fromTheme("qemu"))
+        dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(380, 150)
         v = QVBoxLayout(dlg)
         v.addWidget(QLabel(S["cvm_name_lbl"]))
@@ -2280,7 +2280,7 @@ class QuickboxWindow(QMainWindow):
     def _dlg_advanced(self, *_):
         dlg = QDialog(self)
         dlg.setWindowTitle(S["adv_title"])
-        dlg.setWindowIcon(QIcon.fromTheme("qemu"))
+        dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(520, 500)
         v = QVBoxLayout(dlg)
 
@@ -2446,7 +2446,7 @@ class QuickboxWindow(QMainWindow):
 
         dlg = QDialog(self)
         dlg.setWindowTitle(S["mig_title"])
-        dlg.setWindowIcon(QIcon.fromTheme("qemu"))
+        dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(480, 460)
         v = QVBoxLayout(dlg)
         v.setSpacing(8)
@@ -2571,7 +2571,7 @@ class QuickboxWindow(QMainWindow):
     def _dlg_hotkeys(self):
         dlg = QDialog(self)
         dlg.setWindowTitle("Keyboard shortcuts")
-        dlg.setWindowIcon(QIcon.fromTheme("qemu"))
+        dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(360, 300)
         v = QVBoxLayout(dlg)
         v.setSpacing(8)
@@ -2621,7 +2621,7 @@ class QuickboxWindow(QMainWindow):
     def _dlg_about(self):
         dlg = QDialog(self)
         dlg.setWindowTitle("About Quickbox")
-        dlg.setWindowIcon(QIcon.fromTheme("qemu"))
+        dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(320, 220)
         v = QVBoxLayout(dlg)
         v.setSpacing(6)
@@ -2691,6 +2691,18 @@ class QuickboxApp(QApplication):
         self.setApplicationVersion(VERSION)
         self.setDesktopFileName("quickbox")
         self.setStyleSheet(APP_STYLE)
+        self._register_icons()
+
+    def _register_icons(self):
+        for p in [
+            Path(__file__).parent / "icons",
+            Path.home() / ".local/share/quickbox/icons",
+        ]:
+            if p.exists():
+                paths = QIcon.themeSearchPaths()
+                if str(p) not in paths:
+                    QIcon.setThemeSearchPaths([str(p)] + paths)
+                break
 
 
 def main():

@@ -2,7 +2,7 @@
 Name=Quickbox
 Comment=Qt6 GUI for quickemu
 Exec=quickbox
-Icon=qemu
+Icon=quickbox
 Terminal=false
 Type=Application
 Categories=System;Emulator;
