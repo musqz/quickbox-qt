@@ -85,7 +85,9 @@ S = {
     "info_guest_os": "Guest OS", "info_boot_mode": "Boot mode",
     "info_ssh_port": "SSH port", "info_disk": "Disk", "info_iso": "ISO",
     "set_profile": "Profile:", "set_compat": "Compatibility mode:",
-    "set_boot": "Boot mode:", "set_quiet": "Quiet launch:",
+    "set_boot": "Boot mode:", "set_display": "Display:",
+    "set_display_hint": "SDL: default.  GTK: resizable window.  SPICE: resizable + copy-paste + USB redirect (requires virt-viewer).",
+    "set_quiet": "Quiet launch:",
     "set_quiet_note": "No launch notification",
     "set_compat_hint": "Use minimal QEMU without VirGL — for lightweight or older distros.",
     "boot_uefi": "UEFI", "boot_legacy": "Legacy (BIOS)",
@@ -1341,6 +1343,31 @@ class QuickboxWindow(QMainWindow):
         sg.addWidget(bc, 4, 1)
         _focusable.append(bc)
 
+        # Display backend
+        import shutil as _shutil
+        _has_virt_viewer = bool(_shutil.which("virt-viewer"))
+        dl = QLabel(S["set_display"])
+        dl.setAlignment(Qt.AlignmentFlag.AlignRight)
+        dc = QComboBox()
+        dc.addItem("SDL",   "sdl")
+        dc.addItem("GTK",   "gtk")
+        dc.addItem("SPICE" + ("" if _has_virt_viewer else " (virt-viewer missing)"), "spice-app")
+        if not _has_virt_viewer:
+            dc.model().item(2).setEnabled(False)
+        cur_display = vm.get("display", "sdl")
+        dc.setCurrentIndex(next((i for i in range(dc.count()) if dc.itemData(i) == cur_display), 0))
+        dc.setEnabled(not read_only)
+        dc.currentIndexChanged.connect(lambda i, v=vm:
+            (setconf("display", dc.currentData(), v["_conf"]),
+             v.update({"display": dc.currentData()})))
+        display_hint = QLabel(S["set_display_hint"])
+        display_hint.setStyleSheet("font-size:11px;")
+        display_hint.setWordWrap(True)
+        sg.addWidget(dl, 5, 0)
+        sg.addWidget(dc, 5, 1)
+        sg.addWidget(display_hint, 6, 1)
+        _focusable.append(dc)
+
         settings_hdr.add_content(settings_w)
         self._right_layout.addWidget(settings_w)
 
@@ -1536,7 +1563,8 @@ class QuickboxWindow(QMainWindow):
         accel = "kvm" if KVM_AVAILABLE else "tcg"
         quiet = vm.get("quiet_launch") == "true"
 
-        cmd = ["quickemu", "--vm", conf_path, "--display", "spice-app"]
+        display = vm.get("display", "sdl")
+        cmd = ["quickemu", "--vm", conf_path, "--display", display]
         subprocess.Popen(cmd, cwd=self.vms_dir)
         if not quiet:
             notify("quickbox", S["ntf_launching"].format(vmname), "low")
