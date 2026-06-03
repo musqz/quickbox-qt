@@ -44,6 +44,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import (
     Qt, QTimer, QThread, Signal, QSocketNotifier, QSize, QMetaObject,
+    QObject, QEvent,
 )
 from PySide6.QtGui import QIcon, QPixmap, QFont, QCursor, QColor, QKeySequence, QAction, QShortcut
 
@@ -1843,6 +1844,43 @@ class QuickboxWindow(QMainWindow):
 
         search.textChanged.connect(_filter)
 
+        class _KbFilter(QObject):
+            def eventFilter(self, obj, event):
+                if event.type() != QEvent.Type.KeyPress:
+                    return False
+                key = event.key()
+                if obj is search:
+                    if key == Qt.Key.Key_Escape:
+                        if search.text():
+                            search.clear()
+                            return True
+                    elif key in (Qt.Key.Key_Down, Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                        dist_list.setFocus()
+                        for i in range(dist_list.count()):
+                            it = dist_list.item(i)
+                            if not it.isHidden() and it.flags() & Qt.ItemFlag.ItemIsSelectable:
+                                dist_list.setCurrentRow(i)
+                                break
+                        return True
+                elif obj is dist_list:
+                    if key == Qt.Key.Key_Up:
+                        cur = dist_list.currentRow()
+                        has_above = any(
+                            not dist_list.item(i).isHidden() and
+                            bool(dist_list.item(i).flags() & Qt.ItemFlag.ItemIsSelectable)
+                            for i in range(cur) if dist_list.item(i)
+                        )
+                        if not has_above:
+                            search.setFocus()
+                            return True
+                return False
+
+        _kb = _KbFilter(dlg)
+        search.installEventFilter(_kb)
+        dist_list.installEventFilter(_kb)
+        QWidget.setTabOrder(search, dist_list)
+        QWidget.setTabOrder(dist_list, close_btn)
+
         selected = [None]
 
         def _on_activate(item):
@@ -1854,10 +1892,14 @@ class QuickboxWindow(QMainWindow):
         dist_list.itemDoubleClicked.connect(_on_activate)
         dist_list.itemActivated.connect(_on_activate)
 
-        while dlg.exec() == QDialog.DialogCode.Accepted and selected[0]:
+        search.setFocus()
+        while True:
+            if dlg.exec() != QDialog.DialogCode.Accepted or not selected[0]:
+                break
             name, cmd = selected[0]
             selected[0] = None
             self._dlg_do_download(name, cmd, distros)
+            search.setFocus()
 
     def _dlg_do_download(self, distro_name, distro_cmd, distros):
         cmd_parts  = distro_cmd.split()
@@ -1911,10 +1953,13 @@ class QuickboxWindow(QMainWindow):
         cancel_btn = QPushButton(S["btn_cancel"])
         dl_btn     = QPushButton(S["btn_download"])
         dl_btn.setStyleSheet("background:#1565c0;color:white;border-radius:5px;padding:5px 14px;font-weight:bold;")
+        dl_btn.setDefault(True)
         br.addStretch()
         br.addWidget(cancel_btn)
         br.addWidget(dl_btn)
         v.addWidget(btn_row)
+        QWidget.setTabOrder(ver_combo, dl_btn)
+        QWidget.setTabOrder(dl_btn, cancel_btn)
 
         self._dl_worker = None
         t0 = [0.0]
@@ -1939,6 +1984,7 @@ class QuickboxWindow(QMainWindow):
                     dl_btn.setText(S["btn_close"])
                 dl_btn.setEnabled(True)
                 cancel_btn.setEnabled(False)
+                dl_btn.setFocus()
             self._refresh()
 
         def _start():
@@ -1951,6 +1997,7 @@ class QuickboxWindow(QMainWindow):
             self._dl_worker.progress.connect(_on_progress)
             self._dl_worker.done.connect(_on_done)
             self._dl_worker.start()
+            cancel_btn.setFocus()
 
         def _cancel():
             if _done[0]:
