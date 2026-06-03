@@ -748,6 +748,7 @@ class SectionHeader(QWidget):
         self.btn = QPushButton(S["btn_hide"] if expanded else S["btn_show"])
         self.btn.setFlat(True)
         self.btn.setStyleSheet("font-size:11px; padding:0 2px;")
+        self.btn.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         self.btn.clicked.connect(self._toggle)
         layout.addWidget(self.btn)
 
@@ -1157,6 +1158,7 @@ class QuickboxWindow(QMainWindow):
         info_hdr = SectionHeader(S["sec_info"], self.conf.get("info_expanded", "true") == "true",
                                  "info_expanded", self.conf)
         self._right_layout.addWidget(info_hdr)
+        _focusable.append(info_hdr.btn)
 
         info_grid = QWidget()
         ig = QGridLayout(info_grid)
@@ -1185,6 +1187,7 @@ class QuickboxWindow(QMainWindow):
                                      self.conf.get("settings_expanded", "true") == "true",
                                      "settings_expanded", self.conf)
         self._right_layout.addWidget(settings_hdr)
+        _focusable.append(settings_hdr.btn)
 
         settings_w = QWidget()
         sg = QGridLayout(settings_w)
@@ -1255,6 +1258,7 @@ class QuickboxWindow(QMainWindow):
                                   self.conf.get("snaps_expanded", "true") == "true",
                                   "snaps_expanded", self.conf)
         self._right_layout.addWidget(snaps_hdr)
+        _focusable.append(snaps_hdr.btn)
 
         snaps_w = QWidget()
         sv = QVBoxLayout(snaps_w)
@@ -1329,6 +1333,7 @@ class QuickboxWindow(QMainWindow):
                                  self.conf.get("acts_expanded", "true") == "true",
                                  "acts_expanded", self.conf)
         self._right_layout.addWidget(acts_hdr)
+        _focusable.append(acts_hdr.btn)
 
         acts_w = QWidget()
         av = QVBoxLayout(acts_w)
@@ -1381,6 +1386,7 @@ class QuickboxWindow(QMainWindow):
                                 self.conf.get("dng_expanded", "true") == "true",
                                 "dng_expanded", self.conf)
         self._right_layout.addWidget(dng_hdr)
+        _focusable.append(dng_hdr.btn)
 
         dng_w = QWidget()
         dv = QVBoxLayout(dng_w)
