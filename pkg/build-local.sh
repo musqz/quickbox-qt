@@ -6,4 +6,4 @@ cd "$(dirname "$0")"
 VER=$(cat ../version.txt | tr -d '[:space:]')
 git -C .. archive --format=tar.gz --prefix="quickbox-qt-$VER/" HEAD \
     > "quickbox-qt-$VER.tar.gz"
-makepkg -si --noconfirm
+makepkg -si --noconfirm --skipchecksums
