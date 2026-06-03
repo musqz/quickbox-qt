@@ -1905,6 +1905,12 @@ class QuickboxWindow(QMainWindow):
         QWidget.setTabOrder(search, dist_list)
         QWidget.setTabOrder(dist_list, close_btn)
 
+        def _focus_search():
+            search.setFocus()
+            search.selectAll()
+        QShortcut(QKeySequence("Ctrl+L"), dlg).activated.connect(_focus_search)
+        QShortcut(QKeySequence("/"),      dlg).activated.connect(_focus_search)
+
         selected = [None]
 
         def _on_activate(item):
