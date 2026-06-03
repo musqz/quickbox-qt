@@ -4,6 +4,17 @@ A Qt6/PySide6 GUI front-end for [quickemu](https://github.com/quickemu-project/q
 
 Ported from the original [quickbox](https://github.com/musqz/quickbox) GTK version.
 
+![quickbox-qt](docs/screenshots/main.png)
+
+<details>
+<summary>More screenshots</summary>
+
+![Download window](docs/screenshots/download.png)
+![VM settings](docs/screenshots/settings.png)
+![Snapshot manager](docs/screenshots/snapshots.png)
+
+</details>
+
 ## Features
 
 - Browse, launch, and manage quickemu VMs from a clean Qt6 interface
