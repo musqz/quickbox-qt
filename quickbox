@@ -797,6 +797,48 @@ class SectionHeader(QWidget):
         self.conf[self.conf_key] = val
 
 
+class _PanelHeaderFilter(QObject):
+    """Enter / → on a section header: expand if needed, then enter first content widget."""
+    def __init__(self, win, section, content, parent=None):
+        super().__init__(parent)
+        self._win = win
+        self._section = section
+        self._content = content
+
+    def eventFilter(self, obj, event):
+        if event.type() != QEvent.Type.KeyPress:
+            return False
+        key = event.key()
+        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Right):
+            if not self._content:
+                return key == Qt.Key.Key_Right  # consume → but let Enter/Space toggle
+            if self._section and not self._section._expanded:
+                self._section._toggle()
+            for w in self._content:
+                if w.isVisibleTo(self._win) and w.isEnabled():
+                    w.setFocus(Qt.FocusReason.OtherFocusReason)
+                    self._win._right_scroll.ensureWidgetVisible(w)
+                    return True
+        return False
+
+
+class _PanelContentFilter(QObject):
+    """← on a non-text content widget returns focus to its section header."""
+    def __init__(self, win, header, parent=None):
+        super().__init__(parent)
+        self._win = win
+        self._header = header
+
+    def eventFilter(self, obj, event):
+        if event.type() != QEvent.Type.KeyPress:
+            return False
+        if event.key() == Qt.Key.Key_Left and not isinstance(obj, QLineEdit):
+            self._header.setFocus(Qt.FocusReason.OtherFocusReason)
+            self._win._right_scroll.ensureWidgetVisible(self._header)
+            return True
+        return False
+
+
 # ── main window ────────────────────────────────────────────────────────────────
 class QuickboxWindow(QMainWindow):
     _sig_refresh_panel       = Signal(object)
@@ -906,7 +948,7 @@ class QuickboxWindow(QMainWindow):
         splitter.addWidget(left)
 
         # right: scroll area
-        self._right_focusable = []
+        self._right_panels = []
         self._right_scroll = QScrollArea()
         self._right_scroll.setWidgetResizable(True)
         self._right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -1103,32 +1145,55 @@ class QuickboxWindow(QMainWindow):
 
     def focusNextPrevChild(self, next_child):
         focused = self.focusWidget()
-        fl = self._right_focusable
+        panels = self._right_panels
+        if not panels:
+            return super().focusNextPrevChild(next_child)
 
-        # Tab from VM list → enter right panel
-        if focused is self._list and next_child and fl:
-            for w in fl:
-                if w.isVisibleTo(self) and w.isEnabled():
-                    w.setFocus(Qt.FocusReason.TabFocusReason)
-                    self._right_scroll.ensureWidgetVisible(w)
-                    return True
+        headers     = [h for h, _, _ in panels]
+        content_map = {w: (h, c) for h, _, c in panels for w in c}
 
-        # Tab / Shift+Tab within right panel
-        if fl and focused in fl:
-            idx = fl.index(focused)
+        def _scroll(w):
+            self._right_scroll.ensureWidgetVisible(w)
+
+        def _go(w, reason=Qt.FocusReason.TabFocusReason):
+            w.setFocus(reason)
+            _scroll(w)
+
+        # Tab from VM list → first panel header
+        if focused is self._list and next_child:
+            _go(headers[0])
+            return True
+
+        # Tab within a section's content
+        if focused in content_map:
+            hdr, content = content_map[focused]
+            idx  = content.index(focused)
             step = 1 if next_child else -1
-            for i in range(1, len(fl)):
+            for i in range(1, len(content)):
                 ni = idx + i * step
-                if ni < 0 or ni >= len(fl):
+                if ni < 0 or ni >= len(content):
                     break
-                w = fl[ni]
+                w = content[ni]
                 if w.isVisibleTo(self) and w.isEnabled():
-                    w.setFocus(Qt.FocusReason.TabFocusReason)
-                    self._right_scroll.ensureWidgetVisible(w)
+                    _go(w)
                     return True
-            # Reached end/start of panel — exit
-            target = self._list if next_child else self._search
-            target.setFocus(Qt.FocusReason.TabFocusReason)
+            # Reached section boundary — jump to adjacent header
+            hi = headers.index(hdr)
+            ni = hi + (1 if next_child else -1)
+            if 0 <= ni < len(headers):
+                _go(headers[ni])
+            else:
+                (self._list if next_child else self._search).setFocus(Qt.FocusReason.TabFocusReason)
+            return True
+
+        # Tab between section headers
+        if focused in headers:
+            idx = headers.index(focused)
+            ni  = idx + (1 if next_child else -1)
+            if 0 <= ni < len(headers):
+                _go(headers[ni])
+            else:
+                (self._list if next_child else self._search).setFocus(Qt.FocusReason.TabFocusReason)
             return True
 
         return super().focusNextPrevChild(next_child)
@@ -1171,7 +1236,11 @@ class QuickboxWindow(QMainWindow):
     def _show_panel(self, vm):
         self._clear_right()
         read_only = self._any_importing
-        _focusable = []
+        _launch_w    = None
+        _settings_c  = []
+        _snaps_c     = []
+        _acts_c      = []
+        _dng_c       = []
 
         # Title
         title = QLabel(f"<b><span style='font-size:16px'>{html.escape(vm['_pretty'])}</span></b>")
@@ -1204,7 +1273,7 @@ class QuickboxWindow(QMainWindow):
             stop_btn.setStyleSheet("background:#b71c1c;color:white;border-radius:6px;padding:6px 16px;font-weight:bold;font-size:13px;")
             stop_btn.clicked.connect(lambda: self._stop_vm(vm))
             lb.addWidget(stop_btn)
-            _focusable.append(stop_btn)
+            _launch_w = stop_btn
         else:
             launch_btn = QPushButton(S["btn_launch"])
             launch_btn.setProperty("class", "launch")
@@ -1212,7 +1281,7 @@ class QuickboxWindow(QMainWindow):
             launch_btn.setEnabled(not read_only)
             launch_btn.clicked.connect(lambda: self._launch_vm(vm))
             lb.addWidget(launch_btn)
-            _focusable.append(launch_btn)
+            _launch_w = launch_btn
         lb.addStretch()
         self._right_layout.addWidget(launch_box)
 
@@ -1220,7 +1289,6 @@ class QuickboxWindow(QMainWindow):
         info_hdr = SectionHeader(S["sec_info"], self.conf.get("info_expanded", "true") == "true",
                                  "info_expanded", self.conf)
         self._right_layout.addWidget(info_hdr)
-        _focusable.append(info_hdr.btn)
 
         info_grid = QWidget()
         ig = QGridLayout(info_grid)
@@ -1249,7 +1317,6 @@ class QuickboxWindow(QMainWindow):
                                      self.conf.get("settings_expanded", "true") == "true",
                                      "settings_expanded", self.conf)
         self._right_layout.addWidget(settings_hdr)
-        _focusable.append(settings_hdr.btn)
 
         settings_w = QWidget()
         sg = QGridLayout(settings_w)
@@ -1277,7 +1344,7 @@ class QuickboxWindow(QMainWindow):
         sg.addWidget(pl, 0, 0)
         sg.addWidget(pc, 0, 1)
         sg.addWidget(profile_desc, 1, 1)
-        _focusable.append(pc)
+        _settings_c.append(pc)
 
         # Compat mode
         cl = QLabel(S["set_compat"])
@@ -1294,7 +1361,7 @@ class QuickboxWindow(QMainWindow):
         sg.addWidget(cl, 2, 0)
         sg.addWidget(cs, 2, 1)
         sg.addWidget(hint, 3, 1)
-        _focusable.append(cs)
+        _settings_c.append(cs)
 
         # Boot mode
         bl = QLabel(S["set_boot"])
@@ -1310,7 +1377,7 @@ class QuickboxWindow(QMainWindow):
              v.update({"boot": bc.currentData()})))
         sg.addWidget(bl, 4, 0)
         sg.addWidget(bc, 4, 1)
-        _focusable.append(bc)
+        _settings_c.append(bc)
 
         settings_hdr.add_content(settings_w)
         self._right_layout.addWidget(settings_w)
@@ -1320,7 +1387,6 @@ class QuickboxWindow(QMainWindow):
                                   self.conf.get("snaps_expanded", "true") == "true",
                                   "snaps_expanded", self.conf)
         self._right_layout.addWidget(snaps_hdr)
-        _focusable.append(snaps_hdr.btn)
 
         snaps_w = QWidget()
         sv = QVBoxLayout(snaps_w)
@@ -1358,14 +1424,14 @@ class QuickboxWindow(QMainWindow):
                     del_btn.setEnabled(not read_only)
                     del_btn.clicked.connect(lambda _, t=snap["tag"]: self._snap_delete(vm, t))
                     rl.addWidget(del_btn)
-                    _focusable.append(del_btn)
+                    _snaps_c.append(del_btn)
 
                     apply_btn = QPushButton(S["snap_apply"])
                     apply_btn.setFixedWidth(70)
                     apply_btn.setEnabled(not read_only)
                     apply_btn.clicked.connect(lambda _, t=snap["tag"]: self._snap_apply(vm, t))
                     rl.addWidget(apply_btn)
-                    _focusable.append(apply_btn)
+                    _snaps_c.append(apply_btn)
                     sv.addWidget(row)
 
             sep2 = make_sep()
@@ -1382,8 +1448,8 @@ class QuickboxWindow(QMainWindow):
             create_btn.clicked.connect(lambda: self._snap_create(vm))
             cr.addWidget(self._snap_entry)
             cr.addWidget(create_btn)
-            _focusable.append(self._snap_entry)
-            _focusable.append(create_btn)
+            _snaps_c.append(self._snap_entry)
+            _snaps_c.append(create_btn)
             cr.addStretch()
             sv.addWidget(create_row)
 
@@ -1395,7 +1461,6 @@ class QuickboxWindow(QMainWindow):
                                  self.conf.get("acts_expanded", "true") == "true",
                                  "acts_expanded", self.conf)
         self._right_layout.addWidget(acts_hdr)
-        _focusable.append(acts_hdr.btn)
 
         acts_w = QWidget()
         av = QVBoxLayout(acts_w)
@@ -1420,7 +1485,7 @@ class QuickboxWindow(QMainWindow):
         tg.addWidget(ql, 0, 0)
         tg.addWidget(qc, 0, 1)
         tg.addWidget(qn, 0, 2)
-        _focusable.append(qc)
+        _acts_c.append(qc)
         av.addWidget(tog_row)
 
         btn_row = QWidget()
@@ -1436,7 +1501,7 @@ class QuickboxWindow(QMainWindow):
             btn.setEnabled(not read_only)
             btn.clicked.connect(cb)
             br.addWidget(btn)
-            _focusable.append(btn)
+            _acts_c.append(btn)
         br.addStretch()
         av.addWidget(btn_row)
 
@@ -1448,7 +1513,6 @@ class QuickboxWindow(QMainWindow):
                                 self.conf.get("dng_expanded", "true") == "true",
                                 "dng_expanded", self.conf)
         self._right_layout.addWidget(dng_hdr)
-        _focusable.append(dng_hdr.btn)
 
         dng_w = QWidget()
         dv = QVBoxLayout(dng_w)
@@ -1475,12 +1539,29 @@ class QuickboxWindow(QMainWindow):
             rl.addWidget(btn)
             rl.addWidget(note, 1)
             dv.addWidget(row)
-            _focusable.append(btn)
+            _dng_c.append(btn)
 
         dng_hdr.add_content(dng_w)
         self._right_layout.addWidget(dng_w)
 
-        self._right_focusable = _focusable
+        _panels = []
+        if _launch_w:
+            _panels.append((_launch_w,        None,         []))
+        _panels.append((info_hdr.btn,     info_hdr,     []))
+        _panels.append((settings_hdr.btn, settings_hdr, _settings_c))
+        _panels.append((snaps_hdr.btn,    snaps_hdr,    _snaps_c))
+        _panels.append((acts_hdr.btn,     acts_hdr,     _acts_c))
+        _panels.append((dng_hdr.btn,      dng_hdr,      _dng_c))
+        self._right_panels = _panels
+
+        for hdr, sec, content in _panels:
+            hf = _PanelHeaderFilter(self, sec, content, hdr)
+            hdr.installEventFilter(hf)
+            for w in content:
+                if not isinstance(w, QLineEdit):
+                    cf = _PanelContentFilter(self, hdr, w)
+                    w.installEventFilter(cf)
+
         self._right_layout.addStretch()
 
     # ── launch / stop ─────────────────────────────────────────────────────────────
