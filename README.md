@@ -66,13 +66,6 @@ extended via the Advanced panel inside the app.
 JSON files live in `translations/`. Add a new file named `<lang_code>.json`
 matching the keys in any existing translation to add a new language.
 
-## Development
-
-```sh
-# Run tests (no display required)
-python -m pytest tests/
-```
-
 ## License
 
 MIT — see [LICENSE](LICENSE).
