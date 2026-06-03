@@ -7,3 +7,4 @@ VER=$(cat ../version.txt | tr -d '[:space:]')
 git -C .. archive --format=tar.gz --prefix="quickbox-qt-$VER/" HEAD \
     > "quickbox-qt-$VER.tar.gz"
 makepkg -si --noconfirm --skipchecksums
+rm -rf src pkg "quickbox-qt-$VER.tar.gz" quickbox-qt-*.pkg.tar.zst
