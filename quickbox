@@ -53,7 +53,7 @@ CONFIG_FILE  = Path.home() / ".config/quickbox/quickbox.conf"
 PROFILES_DIR = Path.home() / ".config/quickbox/profiles"
 CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 # ── i18n ───────────────────────────────────────────────────────────────────────
 import locale as _locale, json as _json
