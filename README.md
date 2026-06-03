@@ -11,6 +11,7 @@ Ported from the original [quickbox](https://github.com/musqz/quickbox) GTK versi
 - Snapshot management (create, apply, delete)
 - Clone and migrate VMs
 - Custom VM creation from local ISO/IMG files
+- Per-VM display backend selector (SDL / GTK / SPICE via virt-viewer)
 - System tray support
 - Translations for 17 languages
 
