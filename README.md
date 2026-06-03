@@ -1,4 +1,4 @@
-# quickbox-qt
+# quickbox-qt --- GUI for quickemu
 
 <p align="center">
   <img src="icons/quickbox.png" width="128" alt="Quickbox icon"/>
