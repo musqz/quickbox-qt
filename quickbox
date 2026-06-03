@@ -1843,17 +1843,21 @@ class QuickboxWindow(QMainWindow):
 
         search.textChanged.connect(_filter)
 
+        selected = [None]
+
         def _on_activate(item):
             data = item.data(Qt.ItemDataRole.UserRole)
             if data:
-                name, cmd = data
-                dlg.hide()
-                self._dlg_do_download(name, cmd, distros)
-                dlg.show()
+                selected[0] = data
+                dlg.accept()
 
         dist_list.itemDoubleClicked.connect(_on_activate)
         dist_list.itemActivated.connect(_on_activate)
-        dlg.exec()
+
+        while dlg.exec() == QDialog.DialogCode.Accepted and selected[0]:
+            name, cmd = selected[0]
+            selected[0] = None
+            self._dlg_do_download(name, cmd, distros)
 
     def _dlg_do_download(self, distro_name, distro_cmd, distros):
         cmd_parts  = distro_cmd.split()
