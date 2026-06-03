@@ -820,6 +820,7 @@ class QuickboxWindow(QMainWindow):
         self._tray_btn.setCheckable(True)
         self._tray_btn.setChecked(self.conf.get("systray") == "true")
         self._tray_btn.setToolTip(S["tt_tray"])
+        self._tray_btn.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         self._tray_btn.toggled.connect(self._on_tray_toggle)
         tb.addWidget(self._tray_btn)
         tb.addSeparator()
@@ -834,6 +835,7 @@ class QuickboxWindow(QMainWindow):
             btn.setToolTip(f"{tip}  ({shortcut})")
             btn.clicked.connect(cb)
             btn.setShortcut(QKeySequence(shortcut))
+            btn.setFocusPolicy(Qt.FocusPolicy.TabFocus)
             tb.addWidget(btn)
             self._hdr_btns.append(btn)
 
@@ -845,6 +847,7 @@ class QuickboxWindow(QMainWindow):
         help_btn.setFixedWidth(28)
         help_btn.setToolTip("Keyboard shortcuts")
         help_btn.setShortcut(QKeySequence("F1"))
+        help_btn.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         help_btn.clicked.connect(self._dlg_hotkeys)
         tb.addWidget(help_btn)
 
@@ -876,6 +879,7 @@ class QuickboxWindow(QMainWindow):
         self._right_scroll = QScrollArea()
         self._right_scroll.setWidgetResizable(True)
         self._right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._right_scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._right_widget = QWidget()
         self._right_layout = QVBoxLayout(self._right_widget)
         self._right_layout.setContentsMargins(16, 12, 16, 16)
@@ -1104,6 +1108,7 @@ class QuickboxWindow(QMainWindow):
     def _show_panel(self, vm):
         self._clear_right()
         read_only = self._any_importing
+        _focusable = []
 
         # Title
         title = QLabel(f"<b><span style='font-size:16px'>{html.escape(vm['_pretty'])}</span></b>")
@@ -1136,6 +1141,7 @@ class QuickboxWindow(QMainWindow):
             stop_btn.setStyleSheet("background:#b71c1c;color:white;border-radius:6px;padding:6px 16px;font-weight:bold;font-size:13px;")
             stop_btn.clicked.connect(lambda: self._stop_vm(vm))
             lb.addWidget(stop_btn)
+            _focusable.append(stop_btn)
         else:
             launch_btn = QPushButton(S["btn_launch"])
             launch_btn.setProperty("class", "launch")
@@ -1143,6 +1149,7 @@ class QuickboxWindow(QMainWindow):
             launch_btn.setEnabled(not read_only)
             launch_btn.clicked.connect(lambda: self._launch_vm(vm))
             lb.addWidget(launch_btn)
+            _focusable.append(launch_btn)
         lb.addStretch()
         self._right_layout.addWidget(launch_box)
 
@@ -1205,6 +1212,7 @@ class QuickboxWindow(QMainWindow):
         sg.addWidget(pl, 0, 0)
         sg.addWidget(pc, 0, 1)
         sg.addWidget(profile_desc, 1, 1)
+        _focusable.append(pc)
 
         # Compat mode
         cl = QLabel(S["set_compat"])
@@ -1221,6 +1229,7 @@ class QuickboxWindow(QMainWindow):
         sg.addWidget(cl, 2, 0)
         sg.addWidget(cs, 2, 1)
         sg.addWidget(hint, 3, 1)
+        _focusable.append(cs)
 
         # Boot mode
         bl = QLabel(S["set_boot"])
@@ -1236,6 +1245,7 @@ class QuickboxWindow(QMainWindow):
              v.update({"boot": bc.currentData()})))
         sg.addWidget(bl, 4, 0)
         sg.addWidget(bc, 4, 1)
+        _focusable.append(bc)
 
         settings_hdr.add_content(settings_w)
         self._right_layout.addWidget(settings_w)
@@ -1282,12 +1292,14 @@ class QuickboxWindow(QMainWindow):
                     del_btn.setEnabled(not read_only)
                     del_btn.clicked.connect(lambda _, t=snap["tag"]: self._snap_delete(vm, t))
                     rl.addWidget(del_btn)
+                    _focusable.append(del_btn)
 
                     apply_btn = QPushButton(S["snap_apply"])
                     apply_btn.setFixedWidth(70)
                     apply_btn.setEnabled(not read_only)
                     apply_btn.clicked.connect(lambda _, t=snap["tag"]: self._snap_apply(vm, t))
                     rl.addWidget(apply_btn)
+                    _focusable.append(apply_btn)
                     sv.addWidget(row)
 
             sep2 = make_sep()
@@ -1304,6 +1316,8 @@ class QuickboxWindow(QMainWindow):
             create_btn.clicked.connect(lambda: self._snap_create(vm))
             cr.addWidget(self._snap_entry)
             cr.addWidget(create_btn)
+            _focusable.append(self._snap_entry)
+            _focusable.append(create_btn)
             cr.addStretch()
             sv.addWidget(create_row)
 
@@ -1339,6 +1353,7 @@ class QuickboxWindow(QMainWindow):
         tg.addWidget(ql, 0, 0)
         tg.addWidget(qc, 0, 1)
         tg.addWidget(qn, 0, 2)
+        _focusable.append(qc)
         av.addWidget(tog_row)
 
         btn_row = QWidget()
@@ -1354,6 +1369,7 @@ class QuickboxWindow(QMainWindow):
             btn.setEnabled(not read_only)
             btn.clicked.connect(cb)
             br.addWidget(btn)
+            _focusable.append(btn)
         br.addStretch()
         av.addWidget(btn_row)
 
@@ -1391,9 +1407,16 @@ class QuickboxWindow(QMainWindow):
             rl.addWidget(btn)
             rl.addWidget(note, 1)
             dv.addWidget(row)
+            _focusable.append(btn)
 
         dng_hdr.add_content(dng_w)
         self._right_layout.addWidget(dng_w)
+
+        if _focusable:
+            QWidget.setTabOrder(self._list, _focusable[0])
+            for _a, _b in zip(_focusable, _focusable[1:]):
+                QWidget.setTabOrder(_a, _b)
+
         self._right_layout.addStretch()
 
     # ── launch / stop ─────────────────────────────────────────────────────────────
@@ -1758,6 +1781,7 @@ class QuickboxWindow(QMainWindow):
             v = QVBoxLayout(dlg)
             v.addWidget(QLabel(S["dl_no_list"]))
             btn = QPushButton(S["btn_close"])
+            btn.setDefault(True)
             btn.clicked.connect(dlg.close)
             v.addWidget(btn)
             dlg.exec()
@@ -2210,6 +2234,7 @@ class QuickboxWindow(QMainWindow):
         cv.addStretch()
 
         close_btn = QPushButton(S["btn_close"])
+        close_btn.setDefault(True)
         close_btn.clicked.connect(dlg.close)
         v.addWidget(close_btn)
         dlg.exec()
