@@ -806,20 +806,37 @@ class _PanelHeaderFilter(QObject):
         self._content = content
 
     def eventFilter(self, obj, event):
-        if event.type() != QEvent.Type.KeyPress:
+        t = event.type()
+        if t not in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease):
             return False
         key = event.key()
-        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Right):
-            if not self._content:
-                return key == Qt.Key.Key_Right  # consume → but let Enter/Space toggle
-            if self._section and not self._section._expanded:
-                self._section._toggle()
-            for w in self._content:
-                if w.isVisibleTo(self._win) and w.isEnabled():
-                    w.setFocus(Qt.FocusReason.OtherFocusReason)
-                    self._win._right_scroll.ensureWidgetVisible(w)
-                    return True
-        return False
+
+        # → always consumed: enter content on press, suppress release
+        if key == Qt.Key.Key_Right:
+            if t == QEvent.Type.KeyPress and self._content:
+                if self._section and not self._section._expanded:
+                    self._section._toggle()
+                for w in self._content:
+                    if w.isVisibleTo(self._win) and w.isEnabled():
+                        w.setFocus(Qt.FocusReason.OtherFocusReason)
+                        self._win._right_scroll.ensureWidgetVisible(w)
+                        break
+            return True  # consume both press and release
+
+        # Enter on a header with content: enter content, never toggle
+        # (QPushButton fires clicked on key-release, so we must consume both)
+        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and self._content:
+            if t == QEvent.Type.KeyPress:
+                if self._section and not self._section._expanded:
+                    self._section._toggle()
+                for w in self._content:
+                    if w.isVisibleTo(self._win) and w.isEnabled():
+                        w.setFocus(Qt.FocusReason.OtherFocusReason)
+                        self._win._right_scroll.ensureWidgetVisible(w)
+                        break
+            return True  # consume both press and release to block toggle
+
+        return False  # Space and Enter on no-content headers pass through normally
 
 
 class _PanelContentFilter(QObject):
