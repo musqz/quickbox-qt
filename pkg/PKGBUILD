@@ -31,6 +31,6 @@ package() {
         install -Dm644 "$f" "$pkgdir/usr/share/$pkgname/$f"
     done
 
-    install -Dm644 pkg/quickbox-qt.desktop \
-        "$pkgdir/usr/share/applications/quickbox-qt.desktop"
+    install -Dm644 pkg/quickbox.desktop \
+        "$pkgdir/usr/share/applications/quickbox.desktop"
 }

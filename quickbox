@@ -2689,6 +2689,7 @@ class QuickboxApp(QApplication):
         super().__init__(argv)
         self.setApplicationName("Quickbox")
         self.setApplicationVersion(VERSION)
+        self.setDesktopFileName("quickbox")
         self.setStyleSheet(APP_STYLE)
 
 
