@@ -1,5 +1,7 @@
 # quickbox-qt
 
+> **Beta** — actively developed and tested. Not yet published to AUR or any distro repository. Feedback welcome.
+
 A Qt6/PySide6 GUI front-end for [quickemu](https://github.com/quickemu-project/quickemu).
 
 Ported from the original [quickbox](https://github.com/musqz/quickbox) GTK version.
@@ -35,12 +37,14 @@ Ported from the original [quickbox](https://github.com/musqz/quickbox) GTK versi
 
 ## Installation
 
-### Arch Linux (PKGBUILD)
+### Arch Linux — local PKGBUILD (beta testing)
 
 ```sh
 cd pkg
 makepkg -si
 ```
+
+> AUR package is planned but not yet published.
 
 ### Manual
 
