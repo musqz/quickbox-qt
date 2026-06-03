@@ -26,3 +26,12 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# VM / quickemu artifacts
+*.iso
+*.img
+*.qcow2
+*.qcow
+*.vmdk
+*.vdi
+*.nvram
