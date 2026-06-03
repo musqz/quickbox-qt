@@ -823,7 +823,7 @@ class _PanelHeaderFilter(QObject):
 
 
 class _PanelContentFilter(QObject):
-    """← on a non-text content widget returns focus to its section header."""
+    """Tab/Shift+Tab navigates the two-level panel; ← on non-text returns to header."""
     def __init__(self, win, header, parent=None):
         super().__init__(parent)
         self._win = win
@@ -832,7 +832,14 @@ class _PanelContentFilter(QObject):
     def eventFilter(self, obj, event):
         if event.type() != QEvent.Type.KeyPress:
             return False
-        if event.key() == Qt.Key.Key_Left and not isinstance(obj, QLineEdit):
+        key = event.key()
+        if key == Qt.Key.Key_Tab:
+            self._win.focusNextPrevChild(True)
+            return True
+        if key == Qt.Key.Key_Backtab:
+            self._win.focusNextPrevChild(False)
+            return True
+        if key == Qt.Key.Key_Left and not isinstance(obj, QLineEdit):
             self._header.setFocus(Qt.FocusReason.OtherFocusReason)
             self._win._right_scroll.ensureWidgetVisible(self._header)
             return True
@@ -1558,9 +1565,8 @@ class QuickboxWindow(QMainWindow):
             hf = _PanelHeaderFilter(self, sec, content, hdr)
             hdr.installEventFilter(hf)
             for w in content:
-                if not isinstance(w, QLineEdit):
-                    cf = _PanelContentFilter(self, hdr, w)
-                    w.installEventFilter(cf)
+                cf = _PanelContentFilter(self, hdr, w)
+                w.installEventFilter(cf)
 
         self._right_layout.addStretch()
 
