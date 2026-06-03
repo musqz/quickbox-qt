@@ -601,7 +601,6 @@ class DownloadWorker(QThread):
         import math, time
         self.progress.emit(S["dl2_starting"], -1.0)
         t0 = time.monotonic()
-        total_bytes = [0]   # filled by stdout reader if Content-Length is available
 
         def _find_file():
             try:
@@ -618,67 +617,36 @@ class DownloadWorker(QThread):
             except Exception:
                 return None
 
-        def _read_stdout():
-            # quickget prints "- URL: <url>" for each file it downloads.
-            # Grab the first one and do a HEAD request for Content-Length.
-            try:
-                for line in self._proc.stdout:
-                    line = line.strip()
-                    if line.startswith("- URL:") and total_bytes[0] == 0:
-                        url = line[len("- URL:"):].strip()
-                        try:
-                            r = subprocess.run(
-                                ["curl", "--disable", "-sI",
-                                 "--max-time", "10", "--location", url],
-                                capture_output=True, text=True, timeout=12)
-                            for h in r.stdout.splitlines():
-                                if h.lower().startswith("content-length:"):
-                                    n = int(h.split(":", 1)[1].strip())
-                                    if n > 0:
-                                        total_bytes[0] = n
-                                    break
-                        except Exception:
-                            pass
-            except Exception:
-                pass
-
-        def _fmt_progress(mb, speed_str, tb):
-            if tb > 0:
-                total_mb = tb / (1024 * 1024)
-                return f"Downloading… {mb:.0f} / {total_mb:.0f} MB  ({speed_str} MB/s)"
-            return S["dl2_progress"].format(f"{mb:.0f}", speed_str)
-
         def _watch():
             elapsed, last_size, last_mb, target, stall = 0, 0, 0.0, None, 0
             while not self._cancel:
                 time.sleep(1)
                 elapsed += 1
-                dot = "." * (elapsed % 4)
+                dot = "." * (elapsed % 4)   # animated pulse: "", ".", "..", "..."
                 if target is None or not target.exists():
                     target = _find_file()
                 if target and target.exists():
                     try:
                         size = target.stat().st_size
                         mb   = size / (1024 * 1024)
-                        tb   = total_bytes[0]
                         if size > last_size:
+                            frac = math.log1p(mb) / (math.log1p(mb) + 8)
                             speed = (size - last_size) / (1024 * 1024)
                             last_mb, last_size, stall = mb, size, 0
-                            frac = (size / tb) if tb > 0 else math.log1p(mb) / (math.log1p(mb) + 8)
                             self.progress.emit(
-                                _fmt_progress(mb, f"{speed:.1f}", tb),
-                                min(frac, 0.99))
+                                S["dl2_progress"].format(f"{mb:.0f}", f"{speed:.1f}"),
+                                min(frac, 0.95))
                         else:
                             stall += 1
                             if stall >= 5:
+                                # indeterminate (-1) signals pulsing bar
                                 self.progress.emit(
                                     f"Server is slow — {last_mb:.0f} MB received, still connected{dot}  ({stall}s)",
                                     -1.0)
                             else:
-                                frac = (last_size / tb) if tb > 0 else math.log1p(last_mb) / (math.log1p(last_mb) + 8)
                                 self.progress.emit(
-                                    _fmt_progress(last_mb, "–", tb),
-                                    min(frac, 0.99))
+                                    S["dl2_progress"].format(f"{last_mb:.0f}", "–"),
+                                    min(math.log1p(last_mb) / (math.log1p(last_mb) + 8), 0.95))
                     except Exception:
                         pass
                 else:
@@ -693,10 +661,8 @@ class DownloadWorker(QThread):
         watcher.start()
         try:
             self._proc = subprocess.Popen(
-                self.cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                cwd=self.vms_dir, text=True)
-            stdout_reader = threading.Thread(target=_read_stdout, daemon=True)
-            stdout_reader.start()
+                self.cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                cwd=self.vms_dir)
             self._proc.wait()
             rc = self._proc.returncode
         except Exception:
