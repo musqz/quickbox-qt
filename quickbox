@@ -906,6 +906,7 @@ class QuickboxWindow(QMainWindow):
         splitter.addWidget(left)
 
         # right: scroll area
+        self._right_focusable = []
         self._right_scroll = QScrollArea()
         self._right_scroll.setWidgetResizable(True)
         self._right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -1099,6 +1100,38 @@ class QuickboxWindow(QMainWindow):
             setconf("win_w", str(self.width()))
             setconf("win_h", str(self.height()))
             event.accept()
+
+    def focusNextPrevChild(self, next_child):
+        focused = self.focusWidget()
+        fl = self._right_focusable
+
+        # Tab from VM list → enter right panel
+        if focused is self._list and next_child and fl:
+            for w in fl:
+                if w.isVisibleTo(self) and w.isEnabled():
+                    w.setFocus(Qt.FocusReason.TabFocusReason)
+                    self._right_scroll.ensureWidgetVisible(w)
+                    return True
+
+        # Tab / Shift+Tab within right panel
+        if fl and focused in fl:
+            idx = fl.index(focused)
+            step = 1 if next_child else -1
+            for i in range(1, len(fl)):
+                ni = idx + i * step
+                if ni < 0 or ni >= len(fl):
+                    break
+                w = fl[ni]
+                if w.isVisibleTo(self) and w.isEnabled():
+                    w.setFocus(Qt.FocusReason.TabFocusReason)
+                    self._right_scroll.ensureWidgetVisible(w)
+                    return True
+            # Reached end/start of panel — exit
+            target = self._list if next_child else self._search
+            target.setFocus(Qt.FocusReason.TabFocusReason)
+            return True
+
+        return super().focusNextPrevChild(next_child)
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_F5 or (
@@ -1447,11 +1480,7 @@ class QuickboxWindow(QMainWindow):
         dng_hdr.add_content(dng_w)
         self._right_layout.addWidget(dng_w)
 
-        if _focusable:
-            QWidget.setTabOrder(self._list, _focusable[0])
-            for _a, _b in zip(_focusable, _focusable[1:]):
-                QWidget.setTabOrder(_a, _b)
-
+        self._right_focusable = _focusable
         self._right_layout.addStretch()
 
     # ── launch / stop ─────────────────────────────────────────────────────────────
