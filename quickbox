@@ -1847,8 +1847,9 @@ class QuickboxWindow(QMainWindow):
             data = item.data(Qt.ItemDataRole.UserRole)
             if data:
                 name, cmd = data
-                dlg.close()
+                dlg.hide()
                 self._dlg_do_download(name, cmd, distros)
+                dlg.show()
 
         dist_list.itemDoubleClicked.connect(_on_activate)
         dist_list.itemActivated.connect(_on_activate)
@@ -1914,6 +1915,7 @@ class QuickboxWindow(QMainWindow):
         self._dl_worker = None
         t0 = [0.0]
         _dl_ok = [False]
+        _done = [False]
 
         def _on_progress(text, frac):
             progress.setValue(int(frac * 1000))
@@ -1925,13 +1927,14 @@ class QuickboxWindow(QMainWindow):
             m, s = divmod(int(elapsed), 60)
             dur = f"{m}m {s}s" if m else f"{s}s"
             _dl_ok[0] = ok
-            if ok:
-                note.setText(f"Downloaded in {dur}")
-                dl_btn.setText(S["dl2_done_close"])
-            else:
-                dl_btn.setText(S["btn_close"])
-            dl_btn.setEnabled(True)
-            cancel_btn.setEnabled(False)
+            if not _done[0]:
+                if ok:
+                    note.setText(f"Downloaded in {dur}")
+                    dl_btn.setText(S["dl2_done_close"])
+                else:
+                    dl_btn.setText(S["btn_close"])
+                dl_btn.setEnabled(True)
+                cancel_btn.setEnabled(False)
             self._refresh()
 
         def _start():
@@ -1946,11 +1949,23 @@ class QuickboxWindow(QMainWindow):
             self._dl_worker.start()
 
         def _cancel():
+            if _done[0]:
+                return
+            _done[0] = True
             if self._dl_worker:
                 self._dl_worker.cancel()
             dlg.close()
 
+        def _on_dialog_close():
+            # Called via finished signal — dialog is already closing, only cancel the worker.
+            if _done[0]:
+                return
+            _done[0] = True
+            if self._dl_worker:
+                self._dl_worker.cancel()
+
         def _close_and_select():
+            _done[0] = True
             dlg.close()
             if _dl_ok[0]:
                 try:
@@ -1969,7 +1984,7 @@ class QuickboxWindow(QMainWindow):
 
         dl_btn.clicked.connect(lambda: _close_and_select() if dl_btn.text() in (S["dl2_done_close"], S["btn_close"]) else _start())
         cancel_btn.clicked.connect(_cancel)
-        dlg.finished.connect(_cancel)
+        dlg.finished.connect(_on_dialog_close)
         dlg.exec()
 
     # ── custom VM ─────────────────────────────────────────────────────────────────
