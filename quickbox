@@ -1536,7 +1536,7 @@ class QuickboxWindow(QMainWindow):
         accel = "kvm" if KVM_AVAILABLE else "tcg"
         quiet = vm.get("quiet_launch") == "true"
 
-        cmd = ["quickemu", "--vm", conf_path, "--display", "sdl"]
+        cmd = ["quickemu", "--vm", conf_path, "--display", "spice-app"]
         subprocess.Popen(cmd, cwd=self.vms_dir)
         if not quiet:
             notify("quickbox", S["ntf_launching"].format(vmname), "low")
