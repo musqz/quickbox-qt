@@ -133,7 +133,7 @@ S = {
     "dl2_cancelled": "Cancelled",
     "dl2_connecting": "Connecting… ({}s)",
     "dl2_unreachable": "Server unreachable — edit command or check VPN, then retry",
-    "dl2_note": "Download time varies depending on ISO size and server speed.",
+    "dl2_note": "If the timer is counting, the connection is active — slow servers may take a minute or more to start.",
     "dl2_search_ph": "Search distros…",
     "cvm_title": "Create Custom VM",
     "cvm_name_lbl": "Enter a name for the new VM:",
@@ -599,7 +599,7 @@ class DownloadWorker(QThread):
 
     def run(self):
         import math, time
-        self.progress.emit(S["dl2_starting"], 0.0)
+        self.progress.emit(S["dl2_starting"], -1.0)
         t0 = time.monotonic()
 
         def _find_file():
@@ -618,10 +618,11 @@ class DownloadWorker(QThread):
                 return None
 
         def _watch():
-            elapsed, last_size, last_mb, target = 0, 0, 0.0, None
+            elapsed, last_size, last_mb, target, stall = 0, 0, 0.0, None, 0
             while not self._cancel:
                 time.sleep(1)
                 elapsed += 1
+                dot = "." * (elapsed % 4)   # animated pulse: "", ".", "..", "..."
                 if target is None or not target.exists():
                     target = _find_file()
                 if target and target.exists():
@@ -631,19 +632,30 @@ class DownloadWorker(QThread):
                         if size > last_size:
                             frac = math.log1p(mb) / (math.log1p(mb) + 8)
                             speed = (size - last_size) / (1024 * 1024)
-                            last_mb, last_size = mb, size
+                            last_mb, last_size, stall = mb, size, 0
                             self.progress.emit(
                                 S["dl2_progress"].format(f"{mb:.0f}", f"{speed:.1f}"),
                                 min(frac, 0.95))
                         else:
-                            self.progress.emit(
-                                S["dl2_progress"].format(f"{last_mb:.0f}", "–"),
-                                min(math.log1p(last_mb) / (math.log1p(last_mb) + 8), 0.95))
+                            stall += 1
+                            if stall >= 5:
+                                # indeterminate (-1) signals pulsing bar
+                                self.progress.emit(
+                                    f"Server is slow — {last_mb:.0f} MB received, still connected{dot}  ({stall}s)",
+                                    -1.0)
+                            else:
+                                self.progress.emit(
+                                    S["dl2_progress"].format(f"{last_mb:.0f}", "–"),
+                                    min(math.log1p(last_mb) / (math.log1p(last_mb) + 8), 0.95))
                     except Exception:
                         pass
                 else:
-                    frac = min(math.log1p(elapsed / 10) / (math.log1p(elapsed / 10) + 6), 0.4)
-                    self.progress.emit(S["dl2_connecting"].format(elapsed), frac)
+                    if elapsed <= 3:
+                        self.progress.emit(S["dl2_starting"], -1.0)
+                    else:
+                        hint = "  —  slow servers may take a minute" if elapsed > 15 else ""
+                        self.progress.emit(
+                            f"Contacting server{dot}  ({elapsed}s){hint}", -1.0)
 
         watcher = threading.Thread(target=_watch, daemon=True)
         watcher.start()
@@ -2081,7 +2093,13 @@ class QuickboxWindow(QMainWindow):
         _done = [False]
 
         def _on_progress(text, frac):
-            progress.setValue(int(frac * 1000))
+            if frac < 0:
+                if progress.maximum() != 0:
+                    progress.setRange(0, 0)   # pulsing indeterminate bar
+            else:
+                if progress.maximum() == 0:
+                    progress.setRange(0, 1000)
+                progress.setValue(int(frac * 1000))
             progress.setFormat(text)
 
         def _on_done(ok):
