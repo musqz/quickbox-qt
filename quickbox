@@ -2389,10 +2389,16 @@ class QuickboxWindow(QMainWindow):
         cv.addWidget(prof_info)
         cv.addStretch()
 
+        btn_row = QHBoxLayout()
+        about_btn = QPushButton("About")
+        about_btn.clicked.connect(self._dlg_about)
         close_btn = QPushButton(S["btn_close"])
         close_btn.setDefault(True)
         close_btn.clicked.connect(dlg.close)
-        v.addWidget(close_btn)
+        btn_row.addWidget(about_btn)
+        btn_row.addStretch()
+        btn_row.addWidget(close_btn)
+        v.addLayout(btn_row)
         dlg.exec()
 
     def _refresh_loc_list(self, container, dlg):
@@ -2626,16 +2632,10 @@ class QuickboxWindow(QMainWindow):
         v.addWidget(grid)
         v.addStretch()
 
-        btn_row = QHBoxLayout()
-        about_btn = QPushButton("About")
-        about_btn.clicked.connect(self._dlg_about)
         close_btn = QPushButton(S["btn_close"])
         close_btn.clicked.connect(dlg.close)
         close_btn.setDefault(True)
-        btn_row.addWidget(about_btn)
-        btn_row.addStretch()
-        btn_row.addWidget(close_btn)
-        v.addLayout(btn_row)
+        v.addWidget(close_btn)
         dlg.exec()
 
     def _dlg_about(self):
