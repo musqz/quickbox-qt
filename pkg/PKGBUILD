@@ -1,6 +1,6 @@
 # Maintainer: musqz
 pkgname=quickbox-qt
-pkgver=1.2.1
+pkgver=1.2.2
 pkgrel=1
 pkgdesc="Qt6/PySide6 GUI front-end for quickemu"
 arch=('any')
@@ -19,7 +19,7 @@ optdepends=(
 conflicts=('quickbox')
 provides=('quickbox')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-sha256sums=('d18e31c62644d511d48075a7cbb068a28dc484b679b0825f3346ad5c238ec859')
+sha256sums=('SKIP')
 
 package() {
     cd "$srcdir/$pkgname-$pkgver"
