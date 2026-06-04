@@ -44,12 +44,10 @@ if [[ -d /usr/share/quickbox-qt ]]; then
     echo -e "${GREEN}✓ Removed /usr/share/quickbox-qt${NC}"
 fi
 
-for size in 16 22 24 32 48 64 96 128 256 512; do
-    icon="/usr/share/icons/hicolor/${size}x${size}/apps/quickbox.png"
-    [[ -f "$icon" ]] && rm "$icon"
-done
+icon="/usr/share/icons/hicolor/scalable/apps/quickbox.svg"
+[[ -f "$icon" ]] && rm "$icon"
 gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor 2>/dev/null || true
-echo -e "${GREEN}✓ Icons removed${NC}"
+echo -e "${GREEN}✓ Icon removed${NC}"
 
 echo ""
 echo -e "${GREEN}=== Uninstall Complete ===${NC}"

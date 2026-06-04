@@ -34,11 +34,9 @@ package() {
     install -Dm644 pkg/quickbox.desktop \
         "$pkgdir/usr/share/applications/quickbox.desktop"
 
-    # Icons
-    for size in 16 22 24 32 48 64 96 128 256 512; do
-        install -Dm644 "icons/hicolor/${size}x${size}/apps/quickbox.png" \
-            "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/quickbox.png"
-    done
+    # Icon
+    install -Dm644 "icons/hicolor/scalable/apps/quickbox.svg" \
+        "$pkgdir/usr/share/icons/hicolor/scalable/apps/quickbox.svg"
 
     # Version
     install -Dm644 version.txt "$pkgdir/usr/share/quickbox-qt/version.txt"

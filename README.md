@@ -1,7 +1,7 @@
 # quickbox-qt --- GUI for quickemu
 
 <p align="center">
-  <img src="icons/quickbox.png" width="128" alt="Quickbox icon"/>
+  <img src="icons/quickbox.svg" width="128" alt="Quickbox icon"/>
 </p>
 
 > **Beta** — actively developed and tested. Not yet published to AUR or any distro repository. Feedback welcome.

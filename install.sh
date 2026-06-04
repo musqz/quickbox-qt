@@ -43,18 +43,14 @@ if [[ -f "version.txt" ]]; then
     echo -e "${GREEN}✓ Version file installed${NC}"
 fi
 
-# Install icons
-if [[ -d "icons/hicolor" ]]; then
-    echo "Installing icons..."
-    for size in 16 22 24 32 48 64 96 128 256 512; do
-        src="icons/hicolor/${size}x${size}/apps/quickbox.png"
-        if [[ -f "$src" ]]; then
-            mkdir -p "/usr/share/icons/hicolor/${size}x${size}/apps"
-            cp "$src" "/usr/share/icons/hicolor/${size}x${size}/apps/quickbox.png"
-        fi
-    done
+# Install icon
+if [[ -f "icons/hicolor/scalable/apps/quickbox.svg" ]]; then
+    echo "Installing icon..."
+    mkdir -p "/usr/share/icons/hicolor/scalable/apps"
+    cp "icons/hicolor/scalable/apps/quickbox.svg" \
+       "/usr/share/icons/hicolor/scalable/apps/quickbox.svg"
     gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor 2>/dev/null || true
-    echo -e "${GREEN}✓ Icons installed${NC}"
+    echo -e "${GREEN}✓ Icon installed${NC}"
 fi
 
 echo ""
