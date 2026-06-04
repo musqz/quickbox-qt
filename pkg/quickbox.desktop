@@ -1,10 +1,12 @@
 [Desktop Entry]
+Version=1.0
+Type=Application
 Name=Quickbox
 Comment=Qt6 GUI for quickemu
 Exec=quickbox
 Icon=quickbox
 Terminal=false
-Type=Application
+StartupNotify=true
+StartupWMClass=quickbox
 Categories=System;Emulator;
 Keywords=vm;virtual;machine;quickemu;qemu;
-StartupWMClass=quickbox
