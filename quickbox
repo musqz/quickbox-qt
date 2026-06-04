@@ -7,6 +7,18 @@ from pathlib import Path
 
 import gi  # noqa — only needed for version check guard below
 
+def _resolve_quickget():
+    """Find quickget, checking common locations GUI sessions may not have on PATH."""
+    found = shutil.which("quickget")
+    if found:
+        return found
+    for p in ["/usr/bin/quickget", "/usr/local/bin/quickget",
+              str(Path.home() / ".local/bin/quickget")]:
+        if Path(p).is_file() and os.access(p, os.X_OK):
+            return p
+    return None
+
+
 # ── single-instance lock ───────────────────────────────────────────────────────
 SOCKET_PATH = Path.home() / ".config/quickbox/quickbox-qt.sock"
 
@@ -662,8 +674,15 @@ class DownloadWorker(QThread):
         watcher = threading.Thread(target=_watch, daemon=True)
         watcher.start()
         try:
+            import shlex as _shlex
+            qg_bin = _resolve_quickget() or "quickget"
+            cmd = [qg_bin] + self.cmd[1:]
+            _shell = os.environ.get("SHELL", "/bin/sh")
+            _cmd_str = " ".join(_shlex.quote(c) for c in cmd)
+            Path(self.vms_dir).mkdir(parents=True, exist_ok=True)
             self._proc = subprocess.Popen(
-                self.cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                [_shell, "-c", _cmd_str],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 cwd=self.vms_dir)
             self._proc.wait()
             rc = self._proc.returncode
@@ -684,7 +703,8 @@ class UpdateDistroWorker(QThread):
     done = Signal(bool, str)   # (ok, message)
     def run(self):
         try:
-            r = subprocess.run(["quickget", "--list-csv"], capture_output=True, text=True, timeout=60)
+            qg_bin = _resolve_quickget() or "quickget"
+            r = subprocess.run([qg_bin, "--list-csv"], capture_output=True, text=True, timeout=60)
             if r.returncode == 0 and r.stdout.strip():
                 out_path = Path.home() / ".config/quickbox/quickinst.csv"
                 out_path.parent.mkdir(parents=True, exist_ok=True)
