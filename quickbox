@@ -2116,6 +2116,12 @@ class QuickboxWindow(QMainWindow):
         cmd_entry.setReadOnly(True)
         ver_combo.currentIndexChanged.connect(lambda i: cmd_entry.setText(versions[i][1]))
         v.addWidget(cmd_entry)
+
+        cli_hint = QLabel(f"If the GUI download fails, run the command above in a terminal from <b>{html.escape(self.vms_dir)}</b> — the VM will appear in the list automatically.")
+        cli_hint.setTextFormat(Qt.TextFormat.RichText)
+        cli_hint.setWordWrap(True)
+        cli_hint.setStyleSheet("font-size:11px;")
+        v.addWidget(cli_hint)
         v.addWidget(make_sep())
 
         progress = QProgressBar()
