@@ -65,7 +65,14 @@ CONFIG_FILE  = Path.home() / ".config/quickbox/quickbox.conf"
 PROFILES_DIR = Path.home() / ".config/quickbox/profiles"
 CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-VERSION = "1.1.0"
+def _read_version():
+    for p in [Path(__file__).parent / "version.txt",
+              Path("/usr/share/quickbox-qt/version.txt")]:
+        if p.is_file():
+            return p.read_text().strip()
+    return "unknown"
+
+VERSION = _read_version()
 
 # ── i18n ───────────────────────────────────────────────────────────────────────
 import locale as _locale, json as _json
