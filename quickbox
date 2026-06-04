@@ -2701,6 +2701,7 @@ class QuickboxWindow(QMainWindow):
         from PySide6.QtWidgets import QProgressDialog
         pd = QProgressDialog(S["prog_wait"], None, 0, 0, self)
         pd.setWindowTitle(title)
+        pd.setWindowIcon(QIcon.fromTheme("quickbox"))
         pd.setWindowModality(Qt.WindowModality.ApplicationModal)
         pd.setMinimumDuration(0)
         pd.setValue(0)
