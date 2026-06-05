@@ -1947,7 +1947,7 @@ class QuickboxWindow(QMainWindow):
         dlg.setWindowTitle(S["dl_title"])
         dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(640, 520)
-        dlg.setMinimumSize(640, 520)
+        dlg.setMinimumSize(640, 460)
         v = QVBoxLayout(dlg)
 
         search = QLineEdit()
