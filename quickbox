@@ -2321,7 +2321,7 @@ class QuickboxWindow(QMainWindow):
         dlg.setWindowTitle(S["adv_title"])
         dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(520, 500)
-        dlg.setMinimumSize(490, 438)
+        dlg.setMinimumSize(520, 450)
         v = QVBoxLayout(dlg)
 
         scroll = QScrollArea()
