@@ -1,15 +1,7 @@
 # quickbox-qt --- GUI for quickemu
 
 <p align="center">
-  <img src="icons/quickbox.svg" width="128" alt="Quickbox icon"/>
-</p>
-
-<p align="center">
-  <a href="https://github.com/musqz/quickbox-qt/releases"><img src="https://img.shields.io/github/v/release/musqz/quickbox-qt" alt="Version"/></a>
-  <img src="https://img.shields.io/badge/license-MIT-blue" alt="License"/>
-  <img src="https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white" alt="Python"/>
-  <img src="https://img.shields.io/badge/Qt-PySide6-41CD52?logo=qt&logoColor=white" alt="PySide6"/>
-  <img src="https://img.shields.io/badge/platform-Linux-lightgrey?logo=linux&logoColor=white" alt="Linux"/>
+  <img src="icons/quickbox.png" width="128" alt="Quickbox icon"/>
 </p>
 
 > **Beta** — actively developed and tested. Not yet published to AUR or any distro repository. Feedback welcome.
@@ -23,9 +15,9 @@ Ported from the original [quickbox](https://github.com/musqz/quickbox) GTK versi
 <details>
 <summary>More screenshots</summary>
 
-![VM settings](docs/screenshots/settings.png)
 ![Download window](docs/screenshots/download.png)
-![Snapshot manager](docs/screenshots/advanced.png)
+![VM settings](docs/screenshots/settings.png)
+![Snapshot manager](docs/screenshots/snapshots.png)
 
 </details>
 
