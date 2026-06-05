@@ -18,14 +18,14 @@ A Qt6/PySide6 GUI front-end for [quickemu](https://github.com/quickemu-project/q
 
 Ported from the original [quickbox](https://github.com/musqz/quickbox) GTK version.
 
-![quickbox-qt](docs/screenshots/main.png)
+![quickbox-qt](docs/screenshots/main.png?v=2)
 
 <details>
 <summary>More screenshots</summary>
 
-![VM settings](docs/screenshots/settings.png)
-![Download window](docs/screenshots/download.png)
-![Snapshot manager](docs/screenshots/advanced.png)
+![VM settings](docs/screenshots/settings.png?v=2)
+![Download window](docs/screenshots/download.png?v=2)
+![Snapshot manager](docs/screenshots/advanced.png?v=2)
 
 </details>
 
