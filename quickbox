@@ -915,30 +915,17 @@ class QuickboxWindow(QMainWindow):
         tb.addSeparator()
 
         self._hdr_btns = []
-        for label, tip, cb, shortcut in [
-            (S["hdr_download"],  S["tt_download"],  self._dlg_download, "Ctrl+D"),
-            (S["hdr_custom_vm"], S["tt_custom_vm"], self._dlg_custom,   "Ctrl+N"),
-            (S["hdr_advanced"],  S["tt_advanced"],  self._dlg_advanced, "Ctrl+,"),
+        for label, tip, cb in [
+            (S["hdr_download"],  S["tt_download"],  self._dlg_download),
+            (S["hdr_custom_vm"], S["tt_custom_vm"], self._dlg_custom),
+            (S["hdr_advanced"],  S["tt_advanced"],  self._dlg_advanced),
         ]:
             btn = QPushButton(label)
-            btn.setToolTip(f"{tip}  ({shortcut})")
+            btn.setToolTip(tip)
             btn.clicked.connect(cb)
-            btn.setShortcut(QKeySequence(shortcut))
             btn.setFocusPolicy(Qt.FocusPolicy.TabFocus)
             tb.addWidget(btn)
             self._hdr_btns.append(btn)
-
-        # push ? to the right
-        spacer = QWidget()
-        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        tb.addWidget(spacer)
-        help_btn = QPushButton("?")
-        help_btn.setFixedWidth(28)
-        help_btn.setToolTip("Keyboard shortcuts")
-        help_btn.setShortcut(QKeySequence("F1"))
-        help_btn.setFocusPolicy(Qt.FocusPolicy.TabFocus)
-        help_btn.clicked.connect(self._dlg_hotkeys)
-        tb.addWidget(help_btn)
 
         self.addToolBar(tb)
 
@@ -988,9 +975,6 @@ class QuickboxWindow(QMainWindow):
         self._status.setSizeGripEnabled(False)
         self.setStatusBar(self._status)
 
-        # keyboard shortcuts
-        QShortcut(QKeySequence("Ctrl+L"), self).activated.connect(self._kb_focus_search)
-        QShortcut(QKeySequence("/"),      self).activated.connect(self._kb_focus_search)
         QShortcut(QKeySequence("Escape"), self).activated.connect(self._kb_escape)
 
         self._list.itemActivated.connect(self._kb_list_enter)
@@ -1195,17 +1179,6 @@ class QuickboxWindow(QMainWindow):
             return True
 
         return super().focusNextPrevChild(next_child)
-
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_F5 or (
-                event.modifiers() & Qt.KeyboardModifier.ControlModifier
-                and event.key() == Qt.Key.Key_R):
-            self._refresh()
-        super().keyPressEvent(event)
-
-    def _kb_focus_search(self):
-        self._search.setFocus()
-        self._search.selectAll()
 
     def _kb_escape(self):
         if self._search.text():
@@ -2062,12 +2035,6 @@ class QuickboxWindow(QMainWindow):
         QWidget.setTabOrder(search, dist_list)
         QWidget.setTabOrder(dist_list, close_btn)
 
-        def _focus_search():
-            search.setFocus()
-            search.selectAll()
-        QShortcut(QKeySequence("Ctrl+L"), dlg).activated.connect(_focus_search)
-        QShortcut(QKeySequence("/"),      dlg).activated.connect(_focus_search)
-
         selected = [None]
 
         def _on_activate(item):
@@ -2612,51 +2579,6 @@ class QuickboxWindow(QMainWindow):
 
     def _warn_migration_failed(self):
         self._warn(S["warn_mig_fail_t"], S["warn_mig_fail_b"])
-
-    # ── hotkeys help ─────────────────────────────────────────────────────────────
-    def _dlg_hotkeys(self):
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Keyboard shortcuts")
-        dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
-        dlg.resize(360, 300)
-        v = QVBoxLayout(dlg)
-        v.setSpacing(8)
-
-        rows = [
-            ("Ctrl+L  /  /",    "Focus VM search"),
-            ("Escape",          "Clear search / back to list"),
-            ("↑ / ↓",           "Navigate VM list"),
-            ("Enter",           "Launch VM  (or Stop if running)"),
-            ("",                ""),
-            ("Ctrl+D",          "Download dialog"),
-            ("Ctrl+N",          "Custom VM dialog"),
-            ("Ctrl+,",          "Advanced dialog"),
-            ("",                ""),
-            ("F5  /  Ctrl+R",   "Refresh"),
-            ("F1",              "This help"),
-        ]
-
-        grid = QWidget()
-        gl = QGridLayout(grid)
-        gl.setColumnStretch(1, 1)
-        gl.setHorizontalSpacing(20)
-        gl.setVerticalSpacing(4)
-        for i, (key, desc) in enumerate(rows):
-            if not key:
-                gl.addWidget(make_sep(), i, 0, 1, 2)
-                continue
-            key_lbl = QLabel(key)
-            key_lbl.setStyleSheet("font-family: monospace; font-weight: bold;")
-            gl.addWidget(key_lbl, i, 0)
-            gl.addWidget(QLabel(desc), i, 1)
-        v.addWidget(grid)
-        v.addStretch()
-
-        close_btn = QPushButton(S["btn_close"])
-        close_btn.clicked.connect(dlg.close)
-        close_btn.setDefault(True)
-        v.addWidget(close_btn)
-        dlg.exec()
 
     def _dlg_about(self):
         dlg = QDialog(self)
