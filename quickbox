@@ -1947,6 +1947,7 @@ class QuickboxWindow(QMainWindow):
         dlg.setWindowTitle(S["dl_title"])
         dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(640, 520)
+        dlg.setMinimumSize(640, 520)
         v = QVBoxLayout(dlg)
 
         search = QLineEdit()
@@ -2320,6 +2321,7 @@ class QuickboxWindow(QMainWindow):
         dlg.setWindowTitle(S["adv_title"])
         dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(520, 500)
+        dlg.setMinimumSize(490, 438)
         v = QVBoxLayout(dlg)
 
         scroll = QScrollArea()
