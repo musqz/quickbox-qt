@@ -1020,6 +1020,11 @@ class QuickboxWindow(QMainWindow):
         self._list.blockSignals(True)
         self._list.clear()
         self.vms = get_vms(self.vms_dir)
+        for vm in self.vms:
+            if not vm.get("ssh_port"):
+                port = get_next_ssh_port(self.vms_dir, vm["_name"])
+                setconf("ssh_port", port, vm["_conf"])
+                vm["ssh_port"] = port
 
         for vm in self.vms:
             if search and search not in vm["_pretty"].lower() and search not in vm["_name"].lower():
