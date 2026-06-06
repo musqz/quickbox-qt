@@ -1,8 +1,4 @@
-# Claude planning docs
-*.md
-!README.md
-!CHANGELOG.md
-!INSTALL.md
+CLAUDE.md
 
 # Python
 __pycache__/
