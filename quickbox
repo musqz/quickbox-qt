@@ -993,7 +993,7 @@ class QuickboxWindow(QMainWindow):
         tb.setIconSize(QSize(22, 22))
 
         self._tray_btn = QPushButton()
-        self._tray_btn.setIcon(QIcon.fromTheme("user-desktop"))
+        self._tray_btn.setIcon(QIcon.fromTheme("user-available-symbolic"))
         self._tray_btn.setCheckable(True)
         self._tray_btn.setChecked(self.conf.get("systray") == "true")
         self._tray_btn.setToolTip(S["tt_tray"])
@@ -1004,9 +1004,9 @@ class QuickboxWindow(QMainWindow):
 
         self._hdr_btns = []
         for icon_name, tip, cb in [
-            ("folder-download",    S["tt_download"],   self._dlg_download),
-            ("computer",           S["tt_custom_vm"],  self._dlg_custom),
-            ("preferences-system", S["tt_advanced"],   self._dlg_advanced),
+            ("folder-download-symbolic",   S["tt_download"],   self._dlg_download),
+            ("document-open-symbolic",     S["tt_custom_vm"],  self._dlg_custom),
+            ("preferences-system-symbolic", S["tt_advanced"],  self._dlg_advanced),
         ]:
             btn = QPushButton()
             btn.setIcon(QIcon.fromTheme(icon_name))
@@ -1017,7 +1017,7 @@ class QuickboxWindow(QMainWindow):
             self._hdr_btns.append(btn)
 
         self._distro_btn = QPushButton()
-        self._distro_btn.setIcon(QIcon.fromTheme("view-refresh"))
+        self._distro_btn.setIcon(QIcon.fromTheme("view-refresh-symbolic"))
         self._distro_btn.setToolTip(f"{S['adv_update_dl']}\n{S['adv_update_hint']}")
         self._distro_btn.clicked.connect(self._update_distros)
         self._distro_btn.setFocusPolicy(Qt.FocusPolicy.TabFocus)
