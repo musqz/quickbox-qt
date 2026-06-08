@@ -1306,7 +1306,7 @@ class QuickboxWindow(QMainWindow):
         if self.isVisible():
             self._hidden_wins = [
                 w for w in QApplication.topLevelWidgets()
-                if w is not self and isinstance(w, QWidget) and w.isVisible()
+                if w is not self and isinstance(w, QDialog) and w.isVisible()
             ]
             for w in self._hidden_wins:
                 w.hide()
