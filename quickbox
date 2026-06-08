@@ -992,16 +992,6 @@ class QuickboxWindow(QMainWindow):
         tb.setMovable(False)
         tb.setIconSize(QSize(22, 22))
 
-        self._tray_btn = QPushButton()
-        self._tray_btn.setIcon(QIcon.fromTheme("user-available-symbolic"))
-        self._tray_btn.setCheckable(True)
-        self._tray_btn.setChecked(self.conf.get("systray") == "true")
-        self._tray_btn.setToolTip(S["tt_tray"])
-        self._tray_btn.setFocusPolicy(Qt.FocusPolicy.TabFocus)
-        self._tray_btn.toggled.connect(self._on_tray_toggle)
-        tb.addWidget(self._tray_btn)
-        tb.addSeparator()
-
         self._hdr_btns = []
         for icon_name, tip, cb in [
             ("folder-download-symbolic", S["tt_download"],  self._dlg_download),
@@ -1014,6 +1004,10 @@ class QuickboxWindow(QMainWindow):
             btn.setFocusPolicy(Qt.FocusPolicy.TabFocus)
             tb.addWidget(btn)
             self._hdr_btns.append(btn)
+
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        tb.addWidget(spacer)
 
         self._distro_btn = QPushButton()
         self._distro_btn.setIcon(QIcon.fromTheme("view-refresh-symbolic"))
@@ -1071,6 +1065,15 @@ class QuickboxWindow(QMainWindow):
         # status bar
         self._status = QStatusBar()
         self._status.setSizeGripEnabled(False)
+        self._tray_btn = QPushButton()
+        self._tray_btn.setIcon(QIcon.fromTheme("user-available-symbolic"))
+        self._tray_btn.setCheckable(True)
+        self._tray_btn.setChecked(self.conf.get("systray") == "true")
+        self._tray_btn.setToolTip(S["tt_tray"])
+        self._tray_btn.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        self._tray_btn.setFlat(True)
+        self._tray_btn.toggled.connect(self._on_tray_toggle)
+        self._status.addPermanentWidget(self._tray_btn)
         adv_btn = QPushButton()
         adv_btn.setIcon(QIcon.fromTheme("preferences-system-symbolic"))
         adv_btn.setToolTip(S["tt_advanced"])
