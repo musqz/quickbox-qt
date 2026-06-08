@@ -2494,6 +2494,7 @@ class QuickboxWindow(QMainWindow):
         flag = Path(self.vms_dir) / f".{dest_name}.copying"
         flag.write_text(str(src_path.stat().st_size))
         self._refresh()
+        self._select_vm_by_name(dest_name)
 
         if is_img:
             disk = str(dest_dir / "disk.qcow2")
@@ -2509,7 +2510,8 @@ class QuickboxWindow(QMainWindow):
                 flag.unlink(missing_ok=True),
                 notify("quickbox", f"VM {vm_name} created!") if ok
                 else self._warn("Conversion failed", err),
-                self._refresh()))
+                self._refresh(),
+                self._select_vm_by_name(dest_name)))
             self._track_worker(worker)
             worker.start()
         else:
@@ -2525,7 +2527,8 @@ class QuickboxWindow(QMainWindow):
             worker.done.connect(lambda ok, err: (
                 notify("quickbox", f"VM {vm_name} created!") if ok
                 else self._warn("Copy failed", err),
-                self._refresh()))
+                self._refresh(),
+                self._select_vm_by_name(dest_name)))
             self._track_worker(worker)
             worker.start()
 
