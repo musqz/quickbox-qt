@@ -2577,7 +2577,7 @@ class QuickboxWindow(QMainWindow):
         cv.addWidget(cur_lbl)
 
         mig_btn = QPushButton(S["adv_migrate"])
-        mig_btn.clicked.connect(lambda: (dlg.close(), self._dlg_migrate()))
+        mig_btn.clicked.connect(lambda: (dlg.close(), QTimer.singleShot(0, self._dlg_migrate)))
         cv.addWidget(mig_btn)
 
         add_btn = QPushButton(S["adv_add_loc"])
@@ -2894,7 +2894,8 @@ class QuickboxWindow(QMainWindow):
 
     def _progress_dialog(self, title):
         from PySide6.QtWidgets import QProgressDialog
-        pd = QProgressDialog(S["prog_wait"], None, 0, 0, self)
+        pd = QProgressDialog(S["prog_wait"], "", 0, 0, self)
+        pd.setCancelButton(None)
         pd.setWindowTitle(title)
         pd.setWindowIcon(QIcon.fromTheme("quickbox"))
         pd.setWindowModality(Qt.WindowModality.ApplicationModal)
