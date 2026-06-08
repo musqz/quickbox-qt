@@ -52,7 +52,7 @@ from PySide6.QtWidgets import (
     QLineEdit, QComboBox, QCheckBox, QSpinBox, QProgressBar, QFrame,
     QToolBar, QStatusBar, QDialog, QDialogButtonBox, QFileDialog,
     QSystemTrayIcon, QMenu, QMessageBox, QSizePolicy, QAbstractItemView,
-    QTextEdit, QRadioButton, QButtonGroup,
+    QTextEdit, QRadioButton, QButtonGroup, QWidgetAction,
 )
 from PySide6.QtCore import (
     Qt, QTimer, QThread, Signal, QSocketNotifier, QSize, QMetaObject,
@@ -1235,17 +1235,45 @@ class QuickboxWindow(QMainWindow):
         if self.conf.get("systray") == "true":
             self._tray.show()
 
+    def _tray_section(self, text):
+        lbl = QLabel(text)
+        lbl.setStyleSheet(
+            "color: #888; font-size: 10px; font-weight: bold; letter-spacing: 1px;"
+            "padding: 6px 16px 3px 16px; background: transparent;")
+        act = QWidgetAction(self._tray_menu)
+        act.setDefaultWidget(lbl)
+        return act
+
+    def _tray_vm_row(self, vm):
+        w = QWidget()
+        w.setStyleSheet("background: transparent;")
+        h = QHBoxLayout(w)
+        h.setContentsMargins(20, 5, 16, 5)
+        h.setSpacing(8)
+        dot = QLabel("●")
+        dot.setStyleSheet("color: #4caf50; font-size: 13px; background: transparent;")
+        name_lbl = QLabel(vm["_pretty"])
+        name_lbl.setStyleSheet("background: transparent;")
+        name_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        stop_lbl = QLabel(S["tray_stop"])
+        stop_lbl.setStyleSheet("color: #e53935; font-size: 11px; background: transparent;")
+        h.addWidget(dot)
+        h.addWidget(name_lbl)
+        h.addWidget(stop_lbl)
+        act = QWidgetAction(self._tray_menu)
+        act.setDefaultWidget(w)
+        act.triggered.connect(lambda _, n=vm["_name"]: self._stop_vm_by_name(n))
+        return act
+
     def _rebuild_tray_menu(self):
         self._tray_menu.clear()
         running = [vm for vm in self.vms if vm.get("_running")]
         if running:
-            self._tray_menu.addSection(S["tray_sec_running"])
+            self._tray_menu.addAction(self._tray_section(S["tray_sec_running"]))
             for vm in running:
-                act = QAction(f"● {vm['_pretty']}  —  {S['tray_stop']}", self)
-                act.triggered.connect(lambda _, n=vm["_name"]: self._stop_vm_by_name(n))
-                self._tray_menu.addAction(act)
+                self._tray_menu.addAction(self._tray_vm_row(vm))
             self._tray_menu.addSeparator()
-        self._tray_menu.addSection(S["tray_sec_app"])
+        self._tray_menu.addAction(self._tray_section(S["tray_sec_app"]))
         show_act = QAction(S["tray_show"], self)
         show_act.triggered.connect(self._tray_show)
         self._tray_menu.addAction(show_act)
