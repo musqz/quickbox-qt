@@ -1004,9 +1004,8 @@ class QuickboxWindow(QMainWindow):
 
         self._hdr_btns = []
         for icon_name, tip, cb in [
-            ("folder-download-symbolic",   S["tt_download"],   self._dlg_download),
-            ("document-open-symbolic",     S["tt_custom_vm"],  self._dlg_custom),
-            ("preferences-system-symbolic", S["tt_advanced"],  self._dlg_advanced),
+            ("folder-download-symbolic", S["tt_download"],  self._dlg_download),
+            ("document-open-symbolic",   S["tt_custom_vm"], self._dlg_custom),
         ]:
             btn = QPushButton()
             btn.setIcon(QIcon.fromTheme(icon_name))
@@ -1072,6 +1071,13 @@ class QuickboxWindow(QMainWindow):
         # status bar
         self._status = QStatusBar()
         self._status.setSizeGripEnabled(False)
+        adv_btn = QPushButton()
+        adv_btn.setIcon(QIcon.fromTheme("preferences-system-symbolic"))
+        adv_btn.setToolTip(S["tt_advanced"])
+        adv_btn.clicked.connect(self._dlg_advanced)
+        adv_btn.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        adv_btn.setFlat(True)
+        self._status.addPermanentWidget(adv_btn)
         self.setStatusBar(self._status)
 
         QShortcut(QKeySequence("Escape"), self).activated.connect(self._kb_escape)
