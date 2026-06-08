@@ -556,7 +556,7 @@ class CopyWorker(QThread):
     progress = Signal(str, str)   # (current_size, total_size)
     done     = Signal(bool, str)
 
-    def __init__(self, src, dst, flag_path, orig_name="", parent=None):
+    def __init__(self, src, dst, flag_path=None, orig_name="", parent=None):
         super().__init__(parent)
         self.src       = src
         self.dst       = dst
@@ -575,10 +575,12 @@ class CopyWorker(QThread):
                 for f in dest_dir.iterdir():
                     if f.stem == self.orig_name and f.suffix in {".sh", ".ports", ".log", ".pid"}:
                         f.unlink(missing_ok=True)
-            Path(self.flag).unlink(missing_ok=True)
+            if self.flag:
+                Path(self.flag).unlink(missing_ok=True)
             self.done.emit(True, "")
         except Exception as e:
-            Path(self.flag).unlink(missing_ok=True)
+            if self.flag:
+                Path(self.flag).unlink(missing_ok=True)
             self.done.emit(False, str(e))
 
 
@@ -2503,9 +2505,6 @@ class QuickboxWindow(QMainWindow):
                          f"pretty=\"{vm_name}\"\nssh_port=\"{ssh_port}\"\n")
         dest_conf.write_text(conf_text)
         dest_conf.chmod(0o755)
-
-        flag = Path(self.vms_dir) / f".{dest_name}.copying"
-        flag.write_text(str(src_path.stat().st_size))
         self._refresh()
         self._select_vm_by_name(dest_name)
 
@@ -2514,8 +2513,7 @@ class QuickboxWindow(QMainWindow):
             notify("quickbox", S["ntf_converting"].format(src_path.name), "low")
             worker = ConvertWorker(str(src_path), disk)
             worker.done.connect(lambda ok, err: (
-                flag.unlink(missing_ok=True),
-                notify("quickbox", f"VM {vm_name} created!") if ok
+                notify("quickbox", S["ntf_vm_created"].format(vm_name)) if ok
                 else self._warn("Conversion failed", err),
                 self._refresh(),
                 self._select_vm_by_name(dest_name)))
@@ -2524,9 +2522,9 @@ class QuickboxWindow(QMainWindow):
         else:
             dest_iso = dest_dir / src_path.name
             notify("quickbox", S["ntf_copying"].format(src_path.name), "low")
-            worker = CopyWorker(src_path, dest_iso, flag)
+            worker = CopyWorker(str(src_path), str(dest_iso))
             worker.done.connect(lambda ok, err: (
-                notify("quickbox", f"VM {vm_name} created!") if ok
+                notify("quickbox", S["ntf_vm_created"].format(vm_name)) if ok
                 else self._warn("Copy failed", err),
                 self._refresh(),
                 self._select_vm_by_name(dest_name)))
