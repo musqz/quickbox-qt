@@ -332,6 +332,7 @@ def get_vms(vms_dir):
                 pass
         vm["_size"] = dir_size(str(Path(vms_dir) / vm["_name"]))
         vms.append(vm)
+    vms.sort(key=lambda v: (not v["_running"], v["_has_disk"], v["_name"].lower()))
     return vms
 
 def get_snapshots(disk_path):
@@ -427,7 +428,7 @@ APP_STYLE = """
 QMainWindow, QWidget { font-size: 13px; }
 QToolBar { spacing: 4px; padding: 2px 4px; }
 QToolBar QPushButton {
-    padding: 4px 10px; border-radius: 4px;
+    padding: 4px; border-radius: 4px;
     border: 1px solid palette(mid);
 }
 QToolBar QPushButton:checked {
@@ -513,11 +514,12 @@ class CopyWorker(QThread):
     progress = Signal(str, str)   # (current_size, total_size)
     done     = Signal(bool, str)
 
-    def __init__(self, src, dst, flag_path, parent=None):
+    def __init__(self, src, dst, flag_path, orig_name, parent=None):
         super().__init__(parent)
-        self.src  = src
-        self.dst  = dst
-        self.flag = flag_path
+        self.src       = src
+        self.dst       = dst
+        self.flag      = flag_path
+        self.orig_name = orig_name
 
     def run(self):
         try:
@@ -527,6 +529,10 @@ class CopyWorker(QThread):
                 shutil.copy2(str(src), str(self.dst))
             else:
                 shutil.copytree(str(src), str(self.dst))
+                dest_dir = Path(self.dst)
+                for f in dest_dir.iterdir():
+                    if f.stem == self.orig_name and f.suffix in {".sh", ".ports", ".log", ".pid"}:
+                        f.unlink(missing_ok=True)
             Path(self.flag).unlink(missing_ok=True)
             self.done.emit(True, "")
         except Exception as e:
@@ -903,9 +909,10 @@ class QuickboxWindow(QMainWindow):
         # toolbar
         tb = QToolBar()
         tb.setMovable(False)
-        tb.setIconSize(QSize(16, 16))
+        tb.setIconSize(QSize(22, 22))
 
-        self._tray_btn = QPushButton(f"⊡  {S['hdr_tray']}")
+        self._tray_btn = QPushButton()
+        self._tray_btn.setIcon(QIcon.fromTheme("user-desktop"))
         self._tray_btn.setCheckable(True)
         self._tray_btn.setChecked(self.conf.get("systray") == "true")
         self._tray_btn.setToolTip(S["tt_tray"])
@@ -915,17 +922,25 @@ class QuickboxWindow(QMainWindow):
         tb.addSeparator()
 
         self._hdr_btns = []
-        for label, tip, cb in [
-            (S["hdr_download"],  S["tt_download"],  self._dlg_download),
-            (S["hdr_custom_vm"], S["tt_custom_vm"], self._dlg_custom),
-            (S["hdr_advanced"],  S["tt_advanced"],  self._dlg_advanced),
+        for icon_name, tip, cb in [
+            ("folder-download",    S["tt_download"],   self._dlg_download),
+            ("computer",           S["tt_custom_vm"],  self._dlg_custom),
+            ("preferences-system", S["tt_advanced"],   self._dlg_advanced),
         ]:
-            btn = QPushButton(label)
+            btn = QPushButton()
+            btn.setIcon(QIcon.fromTheme(icon_name))
             btn.setToolTip(tip)
             btn.clicked.connect(cb)
             btn.setFocusPolicy(Qt.FocusPolicy.TabFocus)
             tb.addWidget(btn)
             self._hdr_btns.append(btn)
+
+        self._distro_btn = QPushButton()
+        self._distro_btn.setIcon(QIcon.fromTheme("view-refresh"))
+        self._distro_btn.setToolTip(f"{S['adv_update_dl']}\n{S['adv_update_hint']}")
+        self._distro_btn.clicked.connect(self._update_distros)
+        self._distro_btn.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        tb.addWidget(self._distro_btn)
 
         self.addToolBar(tb)
 
@@ -1746,7 +1761,7 @@ class QuickboxWindow(QMainWindow):
                     continue
                 if k == "pretty":
                     out.append(f'pretty="{dest_name}"')
-                elif k == "disk_img" and val and vm["_name"] in val:
+                elif k in {"disk_img", "iso"} and val and vm["_name"] in val:
                     out.append(f'{k}="{val.replace(vm["_name"], dest_name)}"')
                 elif val:
                     out.append(f'{k}="{val}"')
@@ -1766,7 +1781,7 @@ class QuickboxWindow(QMainWindow):
         flag = Path(self.vms_dir) / f".{dest_name}.copying"
         flag.touch()
 
-        worker = CopyWorker(src_dir, dest_dir, flag)
+        worker = CopyWorker(src_dir, dest_dir, flag, vm["_name"])
         worker.done.connect(lambda ok, err: (
             notify("quickbox", S["ntf_clone_done"].format(dest_name)) if ok
             else self._warn(S["warn_clone_t"], S["warn_clone_dir"].format(err)),
@@ -2337,27 +2352,6 @@ class QuickboxWindow(QMainWindow):
         self._refresh_loc_list(loc_list_w, dlg)
 
         cv.addWidget(make_sep())
-        cv.addWidget(make_section(S["adv_sec_distro"]))
-        upd_btn = QPushButton(S["adv_update_dl"])
-        upd_hint = QLabel(S["adv_update_hint"])
-        upd_hint.setStyleSheet("font-size:11px;")
-        upd_hint.setWordWrap(True)
-        def _update_distros():
-            upd_btn.setEnabled(False)
-            upd_btn.setText(S["distro_updating"])
-            worker = UpdateDistroWorker()
-            def _on_done(ok, msg):
-                upd_btn.setEnabled(True)
-                upd_btn.setText(S["adv_update_dl"])
-                notify("Quickbox", msg, "low" if ok else "critical")
-            worker.done.connect(_on_done)
-            self._track_worker(worker)
-            worker.start()
-        upd_btn.clicked.connect(_update_distros)
-        cv.addWidget(upd_btn)
-        cv.addWidget(upd_hint)
-
-        cv.addWidget(make_sep())
         cv.addWidget(make_section(S["adv_sec_prof"]))
         open_prof_btn = QPushButton(S["adv_open_prof"])
         open_prof_btn.clicked.connect(lambda: subprocess.Popen(["xdg-open", str(PROFILES_DIR)]))
@@ -2387,6 +2381,16 @@ class QuickboxWindow(QMainWindow):
         btn_row.addWidget(close_btn)
         v.addLayout(btn_row)
         dlg.exec()
+
+    def _update_distros(self):
+        self._distro_btn.setEnabled(False)
+        worker = UpdateDistroWorker()
+        def _on_done(ok, msg):
+            self._distro_btn.setEnabled(True)
+            notify("Quickbox", msg, "low" if ok else "critical")
+        worker.done.connect(_on_done)
+        self._track_worker(worker)
+        worker.start()
 
     def _refresh_loc_list(self, container, dlg):
         # Clear and rebuild the saved locations list widget
