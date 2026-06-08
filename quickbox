@@ -2455,20 +2455,15 @@ class QuickboxWindow(QMainWindow):
 
     # ── custom VM ─────────────────────────────────────────────────────────────────
     def _dlg_custom(self, *_):
-        src_path, _ = QFileDialog.getOpenFileName(
-            self, S["cvm_file_title"], str(Path.home()),
-            "Disk images (*.iso *.img)")
-        if not src_path:
-            return
-        src_path = Path(src_path)
-
+        # Step 1: name
         dlg = QDialog(self)
         dlg.setWindowTitle(S["cvm_title"])
         dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(380, 150)
         v = QVBoxLayout(dlg)
         v.addWidget(QLabel(S["cvm_name_lbl"]))
-        name_entry = QLineEdit(src_path.stem.replace(" ", "-"))
+        name_entry = QLineEdit(S["cvm_name_def"])
+        name_entry.selectAll()
         v.addWidget(name_entry)
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         btns.button(QDialogButtonBox.StandardButton.Ok).setText(S["btn_next"])
@@ -2488,6 +2483,14 @@ class QuickboxWindow(QMainWindow):
         if dest_conf.exists():
             self._warn(S["warn_exists_t"], S["warn_exists_b"].format(dest_name))
             return
+
+        # Step 2: file picker
+        src_str, _ = QFileDialog.getOpenFileName(
+            self, S["cvm_file_title"], str(Path.home()),
+            "Disk images (*.iso *.img *.ISO *.IMG)")
+        if not src_str:
+            return
+        src_path = Path(src_str)
 
         ssh_port = get_next_ssh_port(self.vms_dir, dest_name)
         dest_dir.mkdir(parents=True, exist_ok=True)
