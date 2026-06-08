@@ -778,13 +778,14 @@ class ResizeDiskWorker(QThread):
         self.new_gb = new_gb
 
     def run(self):
+        ok = True
         try:
             subprocess.run(
                 ["qemu-img", "resize", self.disk, f"{self.new_gb}G"],
                 check=True, capture_output=True)
-            self.done.emit(True)
         except Exception:
-            self.done.emit(False)
+            ok = False
+        self.done.emit(ok)
 
 
 class UpdateDistroWorker(QThread):
@@ -1986,9 +1987,13 @@ class QuickboxWindow(QMainWindow):
 
     # ── delete / format ───────────────────────────────────────────────────────────
     def _dlg_resize_disk(self, vm):
+        disk_path = vm.get("_disk", "")
+        if not disk_path or not Path(disk_path).exists():
+            self._warn(S["warn_no_disk_t"], S["warn_no_disk_b"])
+            return
         try:
             r = subprocess.run(
-                ["qemu-img", "info", "--output=json", vm["_disk"]],
+                ["qemu-img", "info", "--output=json", disk_path],
                 capture_output=True, text=True, check=True)
             info = _json.loads(r.stdout)
             cur_gb = max(1, info.get("virtual-size", 0) // (1024 ** 3))
@@ -2021,7 +2026,7 @@ class QuickboxWindow(QMainWindow):
         if not self._confirm(S["dlg_rsz_t"], S["dlg_rsz_b"].format(new_gb)):
             return
 
-        worker = ResizeDiskWorker(vm["_disk"], new_gb)
+        worker = ResizeDiskWorker(disk_path, new_gb)
         def _on_done(ok):
             if ok:
                 setconf("disk_size", f"{new_gb}G", vm["_conf"])
@@ -2029,7 +2034,7 @@ class QuickboxWindow(QMainWindow):
                 self._refresh()
             else:
                 self._warn(S["warn_rsz_fail_t"], S["warn_rsz_fail_b"])
-        worker.done.connect(_on_done)
+        worker.done.connect(_on_done, Qt.ConnectionType.QueuedConnection)
         self._track_worker(worker)
         worker.start()
 
