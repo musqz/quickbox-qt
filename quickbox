@@ -86,6 +86,11 @@ S = {
     "tt_custom_vm": "Create a VM from a local ISO or IMG file",
     "tt_advanced": "Migrate VMs, switch location, manage saved paths",
     "tt_tray": "Enable system tray icon",
+    "tray_sec_running": "RUNNING", "tray_sec_app": "QUICKBOX",
+    "tray_show": "Show Quickbox", "tray_notifications": "Notifications",
+    "tray_quit": "Quit Quickbox", "tray_stop": "Stop",
+    "dlg_stop_t": "Stop '{}'?",
+    "dlg_stop_b": "The VM will be sent a shutdown signal.",
     "search_ph": "Filter VMs…",
     "badge_running": "running",
     "status_vms": "{} VM", "status_vms_pl": "{} VMs",
@@ -419,7 +424,11 @@ def _date_tag(with_time=False):
     now = datetime.datetime.now()
     return now.strftime(date_fmt) + (now.strftime('-%H%M') if with_time else '')
 
+_notifications_on = True
+
 def notify(title, body, urgency="low"):
+    if not _notifications_on:
+        return
     try:
         subprocess.Popen(["notify-send", "-i", "quickbox", "-u", urgency, title, body])
     except Exception:
@@ -956,6 +965,8 @@ class QuickboxWindow(QMainWindow):
         self._sig_status.connect(lambda msg: self._status.showMessage(msg, 4000))
         self.conf        = read_conf()
         self.vms_dir     = self.conf.get("vms_dir", str(Path.home() / "emu"))
+        global _notifications_on
+        _notifications_on = self.conf.get("notifications", "true") == "true"
         self.vms         = []
         self.current_vm  = None
         self._any_importing = False
@@ -1217,26 +1228,63 @@ class QuickboxWindow(QMainWindow):
     # ── systray ───────────────────────────────────────────────────────────────────
     def _build_tray(self):
         self._tray = QSystemTrayIcon(QIcon.fromTheme("quickbox"), self)
-        menu = QMenu()
-        show_act = QAction("Show / Hide", self)
-        show_act.triggered.connect(self._tray_toggle)
-        quit_act = QAction("Quit", self)
-        quit_act.triggered.connect(QApplication.quit)
-        menu.addAction(show_act)
-        menu.addSeparator()
-        menu.addAction(quit_act)
-        self._tray.setContextMenu(menu)
-        self._tray.activated.connect(lambda r: self._tray_toggle() if r == QSystemTrayIcon.ActivationReason.Trigger else None)
+        self._tray_menu = QMenu()
+        self._tray_menu.aboutToShow.connect(self._rebuild_tray_menu)
+        self._tray.setContextMenu(self._tray_menu)
+        self._tray.activated.connect(lambda r: self._tray_show() if r == QSystemTrayIcon.ActivationReason.Trigger else None)
         if self.conf.get("systray") == "true":
             self._tray.show()
+
+    def _rebuild_tray_menu(self):
+        self._tray_menu.clear()
+        running = [vm for vm in self.vms if vm.get("_running")]
+        if running:
+            self._tray_menu.addSection(S["tray_sec_running"])
+            for vm in running:
+                act = QAction(f"● {vm['_pretty']}  —  {S['tray_stop']}", self)
+                act.triggered.connect(lambda _, n=vm["_name"]: self._stop_vm_by_name(n))
+                self._tray_menu.addAction(act)
+            self._tray_menu.addSeparator()
+        self._tray_menu.addSection(S["tray_sec_app"])
+        show_act = QAction(S["tray_show"], self)
+        show_act.triggered.connect(self._tray_show)
+        self._tray_menu.addAction(show_act)
+        notif_act = QAction(S["tray_notifications"], self)
+        notif_act.setCheckable(True)
+        notif_act.setChecked(_notifications_on)
+        notif_act.triggered.connect(self._set_notifications)
+        self._tray_menu.addAction(notif_act)
+        self._tray_menu.addSeparator()
+        quit_act = QAction(S["tray_quit"], self)
+        quit_act.triggered.connect(QApplication.quit)
+        self._tray_menu.addAction(quit_act)
+
+    def _set_notifications(self, enabled):
+        global _notifications_on
+        _notifications_on = enabled
+        setconf("notifications", "true" if enabled else "false")
+        self.conf["notifications"] = "true" if enabled else "false"
+
+    def _stop_vm_by_name(self, name):
+        self._tray_show()
+        if not self._confirm(S["dlg_stop_t"].format(name), S["dlg_stop_b"]):
+            return
+        try:
+            subprocess.run(["pkill", "-TERM", "-f", f"name {name},process={name}"])
+        except Exception:
+            pass
+        self._poll_vm_state(name, want_running=False)
+
+    def _tray_show(self):
+        self.show()
+        self.raise_()
+        self.activateWindow()
 
     def _tray_toggle(self):
         if self.isVisible():
             self.hide()
         else:
-            self.show()
-            self.raise_()
-            self.activateWindow()
+            self._tray_show()
 
     def _on_tray_toggle(self, checked):
         setconf("systray", "true" if checked else "false")
