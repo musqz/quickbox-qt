@@ -3,9 +3,8 @@
 # MIT License - Copyright (c) 2026 Musqz
 
 import sys, os, socket, subprocess, threading, glob, shutil, datetime, html
+sys.argv[0] = "quickbox"
 from pathlib import Path
-
-import gi  # noqa — only needed for version check guard below
 
 def _resolve_quickget():
     """Find quickget, checking common locations GUI sessions may not have on PATH."""
@@ -52,7 +51,7 @@ from PySide6.QtWidgets import (
     QLineEdit, QComboBox, QCheckBox, QSpinBox, QProgressBar, QFrame,
     QToolBar, QStatusBar, QDialog, QDialogButtonBox, QFileDialog,
     QSystemTrayIcon, QMenu, QMessageBox, QSizePolicy, QAbstractItemView,
-    QTextEdit, QRadioButton, QButtonGroup,
+    QTextEdit, QRadioButton, QButtonGroup, QWidgetAction,
 )
 from PySide6.QtCore import (
     Qt, QTimer, QThread, Signal, QSocketNotifier, QSize, QMetaObject,
@@ -80,12 +79,15 @@ _lang = (_locale.getlocale()[0] or "en")[:2]
 
 S = {
     "app_title": "Quickbox",
-    "hdr_download": "Download", "hdr_custom_vm": "Custom VM",
-    "hdr_advanced": "Advanced", "hdr_tray": "Tray",
     "tt_download": "Download a new distro ISO via quickget",
     "tt_custom_vm": "Create a VM from a local ISO or IMG file",
     "tt_advanced": "Migrate VMs, switch location, manage saved paths",
     "tt_tray": "Enable system tray icon",
+    "tray_sec_running": "RUNNING", "tray_sec_app": "QUICKBOX",
+    "tray_show": "Show Quickbox", "tray_notifications": "Notifications",
+    "tray_quit": "Quit Quickbox", "tray_stop": "Stop",
+    "dlg_stop_t": "Stop '{}'?",
+    "dlg_stop_b": "The VM will be sent a shutdown signal.",
     "search_ph": "Filter VMs…",
     "badge_running": "running",
     "status_vms": "{} VM", "status_vms_pl": "{} VMs",
@@ -95,7 +97,6 @@ S = {
     "sec_actions": "ACTIONS",
     "sec_danger":  "DANGER ZONE",
     "vm_copying": "⏳ Importing…",
-    "vm_running": "VM is running",
     "btn_stop": "Stop VM", "btn_launch": "Launch VM",
     "btn_hide": "Hide", "btn_show": "Show",
     "btn_cancel": "Cancel", "btn_close": "Close",
@@ -115,22 +116,35 @@ S = {
     "snap_entry_ph": "New snapshot tag…",
     "snap_create": "Create snapshot",
     "snap_apply": "Apply", "snap_delete": "Delete",
-    "snap_active": "Active: {}",
     "snap_autosave_chk": "Save current state first as:",
     "snap_autosave_skip": "Disk already at this snapshot — no backup needed",
     "snap_autosave_done": "Current state saved as '{}'",
+    "snap_creating": "Creating snapshot '{}'…",
+    "snap_applying": "Applying snapshot '{}'…",
+    "snap_saving":   "Saving current state as '{}'…",
+    "snap_deleting": "Deleting snapshot '{}'…",
+    "snap_stale":    "Last applied: {} (deleted)",
     "act_edit_conf": "Edit conf", "act_clone": "Clone VM",
-    "act_open_dir": "Open dir",
+    "act_open_dir": "Open dir", "act_resize_disk": "Resize disk",
     "tt_edit_conf": "Open the VM configuration file in a text editor",
     "tt_clone": "Create a full copy of this VM with a new name",
     "tt_open_dir": "Open the VM directory in the file manager",
+    "tt_resize_disk": "Grow the disk non-destructively — keeps all data",
+    "rsz_title": "Resize disk", "rsz_cur_lbl": "Current size:",
+    "rsz_size_lbl": "New total size (GB):",
+    "btn_resize": "Resize",
+    "dlg_rsz_t": "Resize disk?",
+    "dlg_rsz_b": "Grow disk to {}GB. The existing data will be kept.\nYou may need to resize the partition inside the VM afterwards.",
+    "ntf_rsz_done": "Disk resized to {}GB",
+    "warn_rsz_fail_t": "Resize failed",
+    "warn_rsz_fail_b": "qemu-img resize returned an error.",
     "dng_del_disk": "Delete disk", "dng_fmt_disk": "Format disk",
     "dng_del_vm": "Delete VM",
-    "tt_del_disk": "Delete the disk image — quickemu recreates a fresh one on next launch. Use this to reset a VM to a clean state.",
-    "tt_fmt_disk": "Pre-create a partitioned disk with a chosen size and layout. For custom VMs where the installer expects a specific partition structure — not needed for standard quickget VMs.",
+    "tt_del_disk": "Remove the disk image only — keeps ISO and config",
+    "tt_fmt_disk": "Create or re-format the disk — erases all data",
     "tt_del_vm": "Permanently remove all VM files including disk and config",
     "clone_title": "Clone VM", "clone_label": "Clone '{}' as:",
-    "clone_tt": "Name for the cloned VM",
+    "clone_tt": "Name for the cloned VM — date suffix helps track when it was made",
     "clone_hint": "The clone will appear in the VM list as a separate VM.",
     "fmt_title": "Format disk", "fmt_warn": "⚠ This will ERASE all data on the disk!",
     "fmt_size_lbl": "Disk size (GB):", "fmt_layout_lbl": "Partition layout:",
@@ -138,6 +152,10 @@ S = {
     "fmt_layout_msd": "MSDOS — ext4 (whole disk)",
     "fmt_layout_fat": "MSDOS — FAT32 (whole disk)",
     "fmt_layout_raw": "Blank — no partitions (raw qcow2)",
+    "tt_fmt_gpt": "UEFI boot — recommended for modern distros",
+    "tt_fmt_msd": "Legacy/BIOS boot — for SliTaz, TinyCore, older distros",
+    "tt_fmt_fat": "For distros that need FAT32 working partition (e.g. EasyOS style)",
+    "tt_fmt_raw": "Let the distro installer handle partitioning",
     "btn_format": "Format",
     "dl_title": "Download Distro",
     "dl_search_ph": "Search distros…",
@@ -147,24 +165,18 @@ S = {
     "dl2_cmd_lbl": "Command:",
     "dl2_ready": "Ready to download",
     "dl2_starting": "Starting download…",
-    "dl2_progress": "Downloading… {} MB  ({} MB/s)",
     "dl2_verifying": "Verifying…",
     "dl2_done": "Download complete!",
     "dl2_failed": "Download failed.",
     "dl2_cancelled": "Cancelled",
-    "dl2_connecting": "Connecting… ({}s)",
-    "dl2_unreachable": "Server unreachable — edit command or check VPN, then retry",
     "dl2_note": "If the timer is counting, the connection is active — slow servers may take a minute or more to start.",
-    "dl2_search_ph": "Search distros…",
     "cvm_title": "Create Custom VM",
     "cvm_name_lbl": "Enter a name for the new VM:",
     "cvm_name_def": "My custom VM",
     "cvm_file_title": "Select ISO or IMG file",
-    "cvm_filter": "Disk images (*.iso *.img)",
     "adv_title": "Advanced",
     "adv_cur_dir": "Current VMs directory:",
     "adv_sec_loc": "LOCATION MANAGEMENT",
-    "adv_sec_distro": "DISTRO LIST MANAGEMENT",
     "adv_sec_prof": "PROFILES MANAGEMENT",
     "adv_sec_saved": "SAVED LOCATIONS (click to switch)",
     "adv_migrate": "Migrate VMs to new location",
@@ -183,9 +195,8 @@ S = {
     "mig_all": "Select all", "mig_none": "Select none",
     "mig_running_tag": "  [running]",
     "mig_stop_tt": "Stop the VM before migrating",
-    "mig_no_dest": "No destination selected",
     "btn_pick_dest": "Select destination…",
-    "prog_wait": "Please wait…", "prog_done": "Done!", "prog_fail": "Failed.",
+    "prog_wait": "Please wait…",
     "distro_updating": "Updating distro list...",
     "ntf_launching": "Launching {}",
     "ntf_snap_created": "Snapshot '{}' created.",
@@ -208,11 +219,8 @@ S = {
     "dlg_fmt_t": "Format disk?",
     "dlg_fmt_b": "This will create a new {}GB disk with layout: {}\n\nAll existing data will be lost.",
     "dlg_migrate_t": "Start migration?",
-    "dlg_migrate_b": "Copy {} VM(s) to:\n{}\n{}\n\nOriginals will remain unless you confirm removal afterwards.",
-    "dlg_danger_t": "Remove original files?",
-    "dlg_danger_b": "Migration succeeded.\n\nPermanently DELETE the {} migrated VM(s) from:\n{}\n{}\n\nThis cannot be undone.",
-    "btn_confirm_yes": "Yes", "btn_confirm_no": "Cancel",
-    "btn_keep": "No, keep files", "btn_delete_orig": "Yes, delete originals",
+    "dlg_migrate_b": "Copy {} VM(s) to:\n{}\n{}",
+    "mig_keep_originals_q": "Leave the migrated VMs in their original location?",
     "warn_exists_t": "Already exists", "warn_exists_b": "VM '{}' already exists.",
     "warn_clone_t": "Clone failed", "warn_clone_conf": "Could not write conf: {}",
     "warn_clone_dir": "Directory copy failed: {}",
@@ -311,6 +319,16 @@ def dir_size(path):
     except Exception:
         return ""
 
+def dir_size_bytes(path):
+    total = 0
+    try:
+        for f in Path(path).rglob("*"):
+            if f.is_file():
+                total += f.stat().st_size
+    except Exception:
+        pass
+    return total
+
 def get_vms(vms_dir):
     vms = []
     for conf_path in sorted(glob.glob(f"{vms_dir}/*.conf")):
@@ -324,14 +342,17 @@ def get_vms(vms_dir):
         vm["_has_disk"] = Path(vm["_disk"]).exists() if vm["_disk"] else False
         flag_path = Path(vms_dir) / f".{vm['_name']}.copying"
         vm["_copying"] = flag_path.exists()
-        vm["_copy_total"] = ""
+        vm["_copy_total_bytes"] = 0
+        vm["_copy_done_bytes"]  = 0
         if vm["_copying"]:
             try:
-                vm["_copy_total"] = fmt_size(int(flag_path.read_text().strip()))
+                vm["_copy_total_bytes"] = int(flag_path.read_text().strip())
             except Exception:
                 pass
+            vm["_copy_done_bytes"] = dir_size_bytes(str(Path(vms_dir) / vm["_name"]))
         vm["_size"] = dir_size(str(Path(vms_dir) / vm["_name"]))
         vms.append(vm)
+    vms.sort(key=lambda v: (not v["_running"], v["_has_disk"], v["_name"].lower()))
     return vms
 
 def get_snapshots(disk_path):
@@ -364,8 +385,9 @@ def _iso_label(vm, vms_dir):
     if not iso:
         return "—"
     if vm.get("_copying"):
-        total = vm.get("_copy_total", "")
-        return f"{iso}  ({total})" if total else iso
+        total_bytes = vm.get("_copy_total_bytes", 0)
+        total_str = fmt_size(total_bytes) if total_bytes else ""
+        return f"{iso}  ({total_str})" if total_str else iso
     try:
         size = fmt_size(Path(vms_dir, iso).stat().st_size)
         return f"{iso}  ({size})"
@@ -386,7 +408,11 @@ def _date_tag(with_time=False):
     now = datetime.datetime.now()
     return now.strftime(date_fmt) + (now.strftime('-%H%M') if with_time else '')
 
+_notifications_on = True
+
 def notify(title, body, urgency="low"):
+    if not _notifications_on:
+        return
     try:
         subprocess.Popen(["notify-send", "-i", "quickbox", "-u", urgency, title, body])
     except Exception:
@@ -427,7 +453,7 @@ APP_STYLE = """
 QMainWindow, QWidget { font-size: 13px; }
 QToolBar { spacing: 4px; padding: 2px 4px; }
 QToolBar QPushButton {
-    padding: 4px 10px; border-radius: 4px;
+    padding: 4px; border-radius: 4px;
     border: 1px solid palette(mid);
 }
 QToolBar QPushButton:checked {
@@ -513,13 +539,15 @@ class CopyWorker(QThread):
     progress = Signal(str, str)   # (current_size, total_size)
     done     = Signal(bool, str)
 
-    def __init__(self, src, dst, flag_path, parent=None):
+    def __init__(self, src, dst, flag_path=None, orig_name="", parent=None):
         super().__init__(parent)
-        self.src  = src
-        self.dst  = dst
-        self.flag = flag_path
+        self.src       = src
+        self.dst       = dst
+        self.flag      = flag_path
+        self.orig_name = orig_name
 
     def run(self):
+        ok, err = True, ""
         try:
             src = Path(self.src)
             if src.is_file():
@@ -527,11 +555,17 @@ class CopyWorker(QThread):
                 shutil.copy2(str(src), str(self.dst))
             else:
                 shutil.copytree(str(src), str(self.dst))
-            Path(self.flag).unlink(missing_ok=True)
-            self.done.emit(True, "")
+                dest_dir = Path(self.dst)
+                for f in dest_dir.iterdir():
+                    if f.stem == self.orig_name and f.suffix in {".sh", ".ports", ".log", ".pid"}:
+                        f.unlink(missing_ok=True)
+            if self.flag:
+                Path(self.flag).unlink(missing_ok=True)
         except Exception as e:
-            Path(self.flag).unlink(missing_ok=True)
-            self.done.emit(False, str(e))
+            ok, err = False, str(e)
+            if self.flag:
+                Path(self.flag).unlink(missing_ok=True)
+        self.done.emit(ok, err)
 
 
 class FormatWorker(QThread):
@@ -619,91 +653,122 @@ class DownloadWorker(QThread):
                 pass
 
     def run(self):
-        import math, time
+        import time, re, select as _sel, os as _os, shlex as _shlex
         self.progress.emit(S["dl2_starting"], -1.0)
-        t0 = time.monotonic()
+        t0     = time.monotonic()
+        total_mb    = None
+        got_progress = False
+        rc = 1
 
-        def _find_file():
-            try:
-                cutoff = t0 - 2.0
-                files = []
-                for f in Path(self.vms_dir).rglob("*"):
-                    if f.is_file() and f.suffix.lower() in (
-                            ".iso", ".img", ".qcow2", ".gz", ".xz", ".zip",
-                            ".part", ".tmp", ".download"):
-                        st = f.stat()
-                        if st.st_mtime >= cutoff:
-                            files.append((st.st_mtime, f))
-                return sorted(files)[-1][1] if files else None
-            except Exception:
-                return None
+        def _fmt_size(mb):
+            return f"{mb / 1024:.1f} GB" if mb >= 1024 else f"{mb:.0f} MB"
 
-        def _watch():
-            elapsed, last_size, last_mb, target, stall = 0, 0, 0.0, None, 0
-            while not self._cancel:
-                time.sleep(1)
-                elapsed += 1
-                dot = "." * (elapsed % 4)   # animated pulse: "", ".", "..", "..."
-                if target is None or not target.exists():
-                    target = _find_file()
-                if target and target.exists():
-                    try:
-                        size = target.stat().st_size
-                        mb   = size / (1024 * 1024)
-                        if size > last_size:
-                            frac = math.log1p(mb) / (math.log1p(mb) + 8)
-                            speed = (size - last_size) / (1024 * 1024)
-                            last_mb, last_size, stall = mb, size, 0
-                            self.progress.emit(
-                                S["dl2_progress"].format(f"{mb:.0f}", f"{speed:.1f}"),
-                                min(frac, 0.95))
-                        else:
-                            stall += 1
-                            if stall >= 5:
-                                # indeterminate (-1) signals pulsing bar
-                                self.progress.emit(
-                                    f"Server is slow — {last_mb:.0f} MB received, still connected{dot}  ({stall}s)",
-                                    -1.0)
-                            else:
-                                self.progress.emit(
-                                    S["dl2_progress"].format(f"{last_mb:.0f}", "–"),
-                                    min(math.log1p(last_mb) / (math.log1p(last_mb) + 8), 0.95))
-                    except Exception:
-                        pass
-                else:
-                    if elapsed <= 3:
-                        self.progress.emit(S["dl2_starting"], -1.0)
-                    else:
-                        hint = "  —  slow servers may take a minute" if elapsed > 15 else ""
-                        self.progress.emit(
-                            f"Contacting server{dot}  ({elapsed}s){hint}", -1.0)
-
-        watcher = threading.Thread(target=_watch, daemon=True)
-        watcher.start()
         try:
-            import shlex as _shlex
-            qg_bin = _resolve_quickget() or "quickget"
-            cmd = [qg_bin] + self.cmd[1:]
-            _shell = os.environ.get("SHELL", "/bin/sh")
+            qg_bin   = _resolve_quickget() or "quickget"
+            cmd      = [qg_bin] + self.cmd[1:]
+            _shell   = _os.environ.get("SHELL", "/bin/sh")
             _cmd_str = " ".join(_shlex.quote(c) for c in cmd)
             Path(self.vms_dir).mkdir(parents=True, exist_ok=True)
             self._proc = subprocess.Popen(
                 [_shell, "-c", _cmd_str],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                cwd=self.vms_dir)
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                cwd=self.vms_dir, bufsize=0)
+
+            fd      = self._proc.stdout.fileno()
+            buf     = b""
+            _cl_re  = re.compile(r'^content-length:\s*(\d+)',    re.IGNORECASE)
+            _cr_re  = re.compile(r'^content-range:[^/]*/(\d+)',  re.IGNORECASE)
+            _pct_re = re.compile(r'([\d.]+)%')
+
+            while True:
+                ready = _sel.select([fd], [], [], 0.5)[0]
+                if ready:
+                    try:
+                        chunk = _os.read(fd, 512)
+                    except OSError:
+                        break
+                    if not chunk:
+                        break
+                    buf += chunk
+                else:
+                    if self._proc.poll() is not None:
+                        break
+                    if not got_progress:
+                        elapsed = int(time.monotonic() - t0)
+                        if elapsed <= 3:
+                            self.progress.emit(S["dl2_starting"], -1.0)
+                        else:
+                            hint = "  —  slow servers may take a minute" if elapsed > 15 else ""
+                            self.progress.emit(f"Contacting server… ({elapsed}s){hint}", -1.0)
+                    continue
+
+                while True:
+                    r = buf.find(b"\r")
+                    n = buf.find(b"\n")
+                    if r == -1 and n == -1:
+                        break
+                    pos     = n if (r == -1 or (n != -1 and n < r)) else r
+                    segment = buf[:pos].decode(errors="replace").strip()
+                    buf     = buf[pos + 1:]
+                    if not segment:
+                        continue
+                    m = _cl_re.search(segment)
+                    if m:
+                        total_mb = int(m.group(1)) / (1024 * 1024)
+                        continue
+                    m = _cr_re.search(segment)
+                    if m:
+                        total_mb = int(m.group(1)) / (1024 * 1024)
+                        continue
+                    m = _pct_re.search(segment)
+                    if m:
+                        pct = float(m.group(1))
+                        got_progress = True
+                        size_str = f" of {_fmt_size(total_mb)}" if total_mb else ""
+                        self.progress.emit(
+                            f"Downloading… {pct:.1f}%{size_str}",
+                            min(pct / 100.0, 0.99))
+                    elif not got_progress:
+                        self.progress.emit(segment[:80], -1.0)
+
+            if buf.strip():
+                segment = buf.decode(errors="replace").strip()
+                if not _pct_re.search(segment) and not got_progress:
+                    self.progress.emit(segment[:80], -1.0)
+
             self._proc.wait()
             rc = self._proc.returncode
         except Exception:
             rc = 1
-        self._cancel = True
-        import time; time.sleep(1.2)
+
+        time.sleep(1.2)
         if rc == 0:
             self.progress.emit(S["dl2_verifying"], 0.97)
-            import time; time.sleep(1.0)
+            time.sleep(1.0)
             self.progress.emit(S["dl2_done"], 1.0)
         else:
             self.progress.emit(S["dl2_failed"] if not self._cancel else S["dl2_cancelled"], 0.0)
         self.done.emit(rc == 0)
+
+
+class ResizeDiskWorker(QThread):
+    done = Signal(bool)
+
+    def __init__(self, disk_path, new_gb, parent=None):
+        super().__init__(parent)
+        self.disk   = disk_path
+        self.new_gb = new_gb
+
+    def run(self):
+        ok = True
+        try:
+            subprocess.run(
+                ["qemu-img", "resize", self.disk, f"{self.new_gb}G"],
+                check=True, capture_output=True)
+        except Exception:
+            ok = False
+        self.done.emit(ok)
 
 
 class UpdateDistroWorker(QThread):
@@ -754,8 +819,13 @@ class VMItemWidget(QWidget):
 
         if vm.get("_copying"):
             center = QHBoxLayout()
-            total = vm.get("_copy_total", "")
-            size_text = f"{vm['_size']} / {total}" if total else vm["_size"]
+            done_bytes  = vm.get("_copy_done_bytes", 0)
+            total_bytes = vm.get("_copy_total_bytes", 0)
+            done_mb = done_bytes / (1024 ** 2)
+            if total_bytes:
+                size_text = f"{done_mb:.0f} MB / {total_bytes / (1024 ** 3):.1f} GB"
+            else:
+                size_text = f"{done_mb:.0f} MB"
             badge = QLabel(f"{size_text}  importing")
             badge.setStyleSheet("background:#e65100; color:white; border-radius:3px; padding:1px 5px; font-size:11px;")
             center.addStretch()
@@ -859,22 +929,27 @@ class _TabFix(QObject):
 # ── main window ────────────────────────────────────────────────────────────────
 class QuickboxWindow(QMainWindow):
     _sig_refresh_panel       = Signal(object)
-    _sig_ask_delete_originals = Signal(object, str)
+    _sig_migration_done      = Signal(object, str)
     _sig_migration_failed    = Signal()
+    _sig_status              = Signal(str)
 
     def __init__(self):
         super().__init__()
         self._sig_refresh_panel.connect(self._refresh_panel)
-        self._sig_ask_delete_originals.connect(self._ask_delete_originals)
+        self._sig_migration_done.connect(self._on_migration_done)
         self._sig_migration_failed.connect(self._warn_migration_failed)
+        self._sig_status.connect(lambda msg: self._status.showMessage(msg, 4000))
         self.conf        = read_conf()
         self.vms_dir     = self.conf.get("vms_dir", str(Path.home() / "emu"))
+        global _notifications_on
+        _notifications_on = self.conf.get("notifications", "true") == "true"
         self.vms         = []
         self.current_vm  = None
         self._any_importing = False
         self._conf_mtimes   = {}
         self._vms_dir_mtime = 0
         self._active_workers = set()
+        self._hidden_wins    = []
 
         # Clean stale copy flags
         for f in Path(self.vms_dir).glob(".*.copying"):
@@ -903,29 +978,31 @@ class QuickboxWindow(QMainWindow):
         # toolbar
         tb = QToolBar()
         tb.setMovable(False)
-        tb.setIconSize(QSize(16, 16))
-
-        self._tray_btn = QPushButton(f"⊡  {S['hdr_tray']}")
-        self._tray_btn.setCheckable(True)
-        self._tray_btn.setChecked(self.conf.get("systray") == "true")
-        self._tray_btn.setToolTip(S["tt_tray"])
-        self._tray_btn.setFocusPolicy(Qt.FocusPolicy.TabFocus)
-        self._tray_btn.toggled.connect(self._on_tray_toggle)
-        tb.addWidget(self._tray_btn)
-        tb.addSeparator()
+        tb.setIconSize(QSize(22, 22))
 
         self._hdr_btns = []
-        for label, tip, cb in [
-            (S["hdr_download"],  S["tt_download"],  self._dlg_download),
-            (S["hdr_custom_vm"], S["tt_custom_vm"], self._dlg_custom),
-            (S["hdr_advanced"],  S["tt_advanced"],  self._dlg_advanced),
+        for icon_name, tip, cb in [
+            ("folder-download-symbolic", S["tt_download"],  self._dlg_download),
+            ("document-open-symbolic",   S["tt_custom_vm"], self._dlg_custom),
         ]:
-            btn = QPushButton(label)
+            btn = QPushButton()
+            btn.setIcon(QIcon.fromTheme(icon_name))
             btn.setToolTip(tip)
             btn.clicked.connect(cb)
             btn.setFocusPolicy(Qt.FocusPolicy.TabFocus)
             tb.addWidget(btn)
             self._hdr_btns.append(btn)
+
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        tb.addWidget(spacer)
+
+        self._distro_btn = QPushButton()
+        self._distro_btn.setIcon(QIcon.fromTheme("view-refresh-symbolic"))
+        self._distro_btn.setToolTip(f"{S['adv_update_dl']}\n{S['adv_update_hint']}")
+        self._distro_btn.clicked.connect(self._update_distros)
+        self._distro_btn.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        tb.addWidget(self._distro_btn)
 
         self.addToolBar(tb)
 
@@ -965,14 +1042,33 @@ class QuickboxWindow(QMainWindow):
         self._right_scroll.setWidget(self._right_widget)
         splitter.addWidget(self._right_scroll)
 
-        splitter.setSizes([280, 620])
+        saved_pos = int(self.conf.get("pane_pos", "280"))
+        splitter.setSizes([saved_pos, max(900 - saved_pos, 400)])
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
+        splitter.splitterMoved.connect(
+            lambda pos, idx: setconf("pane_pos", str(splitter.sizes()[0])))
         self.setCentralWidget(splitter)
 
         # status bar
         self._status = QStatusBar()
         self._status.setSizeGripEnabled(False)
+        self._tray_btn = QPushButton()
+        self._tray_btn.setIcon(QIcon.fromTheme("user-available-symbolic"))
+        self._tray_btn.setCheckable(True)
+        self._tray_btn.setChecked(self.conf.get("systray") == "true")
+        self._tray_btn.setToolTip(S["tt_tray"])
+        self._tray_btn.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        self._tray_btn.setFlat(True)
+        self._tray_btn.toggled.connect(self._on_tray_toggle)
+        self._status.addPermanentWidget(self._tray_btn)
+        adv_btn = QPushButton()
+        adv_btn.setIcon(QIcon.fromTheme("preferences-system-symbolic"))
+        adv_btn.setToolTip(S["tt_advanced"])
+        adv_btn.clicked.connect(self._dlg_advanced)
+        adv_btn.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        adv_btn.setFlat(True)
+        self._status.addPermanentWidget(adv_btn)
         self.setStatusBar(self._status)
 
         QShortcut(QKeySequence("Escape"), self).activated.connect(self._kb_escape)
@@ -1109,26 +1205,111 @@ class QuickboxWindow(QMainWindow):
     # ── systray ───────────────────────────────────────────────────────────────────
     def _build_tray(self):
         self._tray = QSystemTrayIcon(QIcon.fromTheme("quickbox"), self)
-        menu = QMenu()
-        show_act = QAction("Show / Hide", self)
-        show_act.triggered.connect(self._tray_toggle)
-        quit_act = QAction("Quit", self)
-        quit_act.triggered.connect(QApplication.quit)
-        menu.addAction(show_act)
-        menu.addSeparator()
-        menu.addAction(quit_act)
-        self._tray.setContextMenu(menu)
+        self._tray_menu = QMenu()
+        self._tray_menu.aboutToShow.connect(self._rebuild_tray_menu)
+        self._tray.setContextMenu(self._tray_menu)
         self._tray.activated.connect(lambda r: self._tray_toggle() if r == QSystemTrayIcon.ActivationReason.Trigger else None)
         if self.conf.get("systray") == "true":
             self._tray.show()
 
+    def _tray_section(self, text):
+        lbl = QLabel(text)
+        lbl.setStyleSheet(
+            "color: #888; font-size: 10px; font-weight: bold; letter-spacing: 1px;"
+            "padding: 6px 16px 3px 16px; background: transparent;")
+        act = QWidgetAction(self._tray_menu)
+        act.setDefaultWidget(lbl)
+        return act
+
+    def _tray_vm_row(self, vm):
+        w = QWidget()
+        w.setStyleSheet("background: transparent;")
+        w.setCursor(Qt.CursorShape.PointingHandCursor)
+        h = QHBoxLayout(w)
+        h.setContentsMargins(20, 5, 16, 5)
+        h.setSpacing(8)
+        dot = QLabel("●")
+        dot.setStyleSheet("color: #4caf50; font-size: 13px; background: transparent;")
+        name_lbl = QLabel(vm["_pretty"])
+        name_lbl.setStyleSheet("background: transparent;")
+        name_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        stop_lbl = QLabel(S["tray_stop"])
+        stop_lbl.setStyleSheet("color: #e53935; font-size: 11px; background: transparent;")
+        for lbl in (dot, name_lbl, stop_lbl):
+            lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        h.addWidget(dot)
+        h.addWidget(name_lbl)
+        h.addWidget(stop_lbl)
+
+        def _clicked(e, n=vm["_name"]):
+            if e.button() == Qt.MouseButton.LeftButton:
+                self._tray_menu.hide()
+                self._stop_vm_by_name(n)
+        w.mousePressEvent = _clicked
+
+        act = QWidgetAction(self._tray_menu)
+        act.setDefaultWidget(w)
+        return act
+
+    def _rebuild_tray_menu(self):
+        self._tray_menu.clear()
+        running = [vm for vm in self.vms if vm.get("_running")]
+        if running:
+            self._tray_menu.addAction(self._tray_section(S["tray_sec_running"]))
+            for vm in running:
+                self._tray_menu.addAction(self._tray_vm_row(vm))
+            self._tray_menu.addSeparator()
+        self._tray_menu.addAction(self._tray_section(S["tray_sec_app"]))
+        show_act = QAction(S["tray_show"], self)
+        show_act.triggered.connect(self._tray_show)
+        self._tray_menu.addAction(show_act)
+        notif_act = QAction(S["tray_notifications"], self)
+        notif_act.setCheckable(True)
+        notif_act.setChecked(_notifications_on)
+        notif_act.triggered.connect(self._set_notifications)
+        self._tray_menu.addAction(notif_act)
+        self._tray_menu.addSeparator()
+        quit_act = QAction(S["tray_quit"], self)
+        quit_act.triggered.connect(QApplication.quit)
+        self._tray_menu.addAction(quit_act)
+
+    def _set_notifications(self, enabled):
+        global _notifications_on
+        _notifications_on = enabled
+        setconf("notifications", "true" if enabled else "false")
+        self.conf["notifications"] = "true" if enabled else "false"
+
+    def _stop_vm_by_name(self, name):
+        self._tray_show()
+        if not self._confirm(S["dlg_stop_t"].format(name), S["dlg_stop_b"]):
+            return
+        try:
+            subprocess.run(["pkill", "-TERM", "-f", f"name {name},process={name}"])
+        except Exception:
+            pass
+        self._poll_vm_state(name, want_running=False)
+
+    def _tray_show(self):
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        # restore windows hidden by the last toggle, raised above main
+        for w in list(self._hidden_wins):
+            w.show()
+            w.raise_()
+        self._hidden_wins.clear()
+
     def _tray_toggle(self):
         if self.isVisible():
+            self._hidden_wins = [
+                w for w in QApplication.topLevelWidgets()
+                if w is not self and isinstance(w, QDialog) and w.isVisible()
+            ]
+            for w in self._hidden_wins:
+                w.hide()
             self.hide()
         else:
-            self.show()
-            self.raise_()
-            self.activateWindow()
+            self._tray_show()
 
     def _on_tray_toggle(self, checked):
         setconf("systray", "true" if checked else "false")
@@ -1399,7 +1580,12 @@ class QuickboxWindow(QMainWindow):
             if not snaps:
                 nl = QLabel(S["snap_none"])
                 sv.addWidget(nl)
-            else:
+            elif current_snap and current_snap not in snap_tags:
+                stale = QLabel(S["snap_stale"].format(current_snap))
+                stale.setStyleSheet("color:#888; font-size:11px;")
+                sv.addWidget(stale)
+
+            if snaps:
                 for snap in snaps:
                     row = QWidget()
                     rl  = QHBoxLayout(row)
@@ -1487,11 +1673,14 @@ class QuickboxWindow(QMainWindow):
         btn_row = QWidget()
         br = QHBoxLayout(btn_row)
         br.setContentsMargins(0, 4, 0, 0)
-        for lbl_key, tt_key, cb in [
+        actions = [
             ("act_edit_conf", "tt_edit_conf", lambda: subprocess.Popen(["xdg-open", vm["_conf"]])),
             ("act_clone",     "tt_clone",     lambda: self._clone_vm(vm)),
             ("act_open_dir",  "tt_open_dir",  lambda: subprocess.Popen(["xdg-open", str(Path(self.vms_dir) / vm["_name"])])),
-        ]:
+        ]
+        if vm["_has_disk"]:
+            actions.append(("act_resize_disk", "tt_resize_disk", lambda: self._dlg_resize_disk(vm)))
+        for lbl_key, tt_key, cb in actions:
             btn = QPushButton(S[lbl_key])
             btn.setToolTip(S[tt_key])
             btn.setEnabled(not read_only)
@@ -1608,6 +1797,7 @@ class QuickboxWindow(QMainWindow):
             return
         worker = SnapWorker("create", vm["_disk"], tag)
         worker.done.connect(lambda ok, err, v=vm, t=tag: self._on_snap_done(ok, err, "create", v, t))
+        self._status.showMessage(S["snap_creating"].format(tag))
         self._track_worker(worker)
         worker.start()
 
@@ -1620,6 +1810,7 @@ class QuickboxWindow(QMainWindow):
             self._warn(S["warn_snap_fail_t"],
                        S["warn_snap_locked"] if ("write" in err.lower() or "lock" in err.lower()) else err),
             self._refresh_and_show(v)))
+        self._status.showMessage(S["snap_deleting"].format(tag))
         self._track_worker(worker)
         worker.start()
 
@@ -1667,10 +1858,12 @@ class QuickboxWindow(QMainWindow):
 
         def _do_apply():
             if save_first:
+                self._sig_status.emit(S["snap_saving"].format(save_name))
                 r = subprocess.run(["qemu-img", "snapshot", "-c", save_name, vm["_disk"]],
                                    capture_output=True)
                 if r.returncode == 0:
                     notify("quickbox", S["snap_autosave_done"].format(save_name))
+            self._sig_status.emit(S["snap_applying"].format(tag))
             r2 = subprocess.run(["qemu-img", "snapshot", "-a", tag, vm["_disk"]],
                                  capture_output=True, text=True)
             if r2.returncode == 0:
@@ -1746,7 +1939,7 @@ class QuickboxWindow(QMainWindow):
                     continue
                 if k == "pretty":
                     out.append(f'pretty="{dest_name}"')
-                elif k == "disk_img" and val and vm["_name"] in val:
+                elif k in {"disk_img", "iso"} and val and vm["_name"] in val:
                     out.append(f'{k}="{val.replace(vm["_name"], dest_name)}"')
                 elif val:
                     out.append(f'{k}="{val}"')
@@ -1766,15 +1959,68 @@ class QuickboxWindow(QMainWindow):
         flag = Path(self.vms_dir) / f".{dest_name}.copying"
         flag.touch()
 
-        worker = CopyWorker(src_dir, dest_dir, flag)
+        worker = CopyWorker(src_dir, dest_dir, flag, vm["_name"])
         worker.done.connect(lambda ok, err: (
             notify("quickbox", S["ntf_clone_done"].format(dest_name)) if ok
             else self._warn(S["warn_clone_t"], S["warn_clone_dir"].format(err)),
-            self._refresh()))
+            self._refresh()),
+            Qt.ConnectionType.QueuedConnection)
         self._track_worker(worker)
         worker.start()
 
     # ── delete / format ───────────────────────────────────────────────────────────
+    def _dlg_resize_disk(self, vm):
+        disk_path = vm.get("_disk", "")
+        if not disk_path or not Path(disk_path).exists():
+            self._warn(S["warn_no_disk_t"], S["warn_no_disk_b"])
+            return
+        try:
+            r = subprocess.run(
+                ["qemu-img", "info", "--output=json", disk_path],
+                capture_output=True, text=True, check=True)
+            info = _json.loads(r.stdout)
+            cur_gb = max(1, info.get("virtual-size", 0) // (1024 ** 3))
+        except Exception:
+            self._warn(S["warn_rsz_fail_t"], S["warn_rsz_fail_b"])
+            return
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(S["rsz_title"])
+        dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
+        v = QVBoxLayout(dlg)
+        v.addWidget(QLabel(f"{S['rsz_cur_lbl']} {cur_gb} GB"))
+        v.addWidget(QLabel(S["rsz_size_lbl"]))
+        spin = QSpinBox()
+        spin.setRange(cur_gb + 1, 9999)
+        spin.setValue(cur_gb + 10)
+        v.addWidget(spin)
+        delta_lbl = QLabel(f"+{spin.value() - cur_gb} GB")
+        spin.valueChanged.connect(lambda val: delta_lbl.setText(f"+{val - cur_gb} GB"))
+        v.addWidget(delta_lbl)
+        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
+        resize_btn = btns.addButton(S["btn_resize"], QDialogButtonBox.ButtonRole.AcceptRole)  # noqa: F841
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        v.addWidget(btns)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        new_gb = spin.value()
+        if not self._confirm(S["dlg_rsz_t"], S["dlg_rsz_b"].format(new_gb)):
+            return
+
+        worker = ResizeDiskWorker(disk_path, new_gb)
+        def _on_done(ok):
+            if ok:
+                setconf("disk_size", f"{new_gb}G", vm["_conf"])
+                notify("quickbox", S["ntf_rsz_done"].format(new_gb))
+                self._refresh()
+            else:
+                self._warn(S["warn_rsz_fail_t"], S["warn_rsz_fail_b"])
+        worker.done.connect(_on_done, Qt.ConnectionType.QueuedConnection)
+        self._track_worker(worker)
+        worker.start()
+
     def _delete_disk(self, vm):
         if not self._confirm(S["dlg_del_disk_t"], S["dlg_del_disk_b"].format(vm["_pretty"])):
             return
@@ -1826,6 +2072,7 @@ class QuickboxWindow(QMainWindow):
         for i, (key, lbl) in enumerate(layouts):
             rb = QRadioButton(lbl)
             rb.setProperty("layout_key", key)
+            rb.setToolTip(S[f"tt_fmt_{key}"])
             grp.addButton(rb)
             v.addWidget(rb)
             if i == 0:
@@ -2052,8 +2299,9 @@ class QuickboxWindow(QMainWindow):
                 break
             name, cmd = selected[0]
             selected[0] = None
+            dlg.close()
             self._dlg_do_download(name, cmd, distros)
-            search.setFocus()
+            break
 
     def _dlg_do_download(self, distro_name, distro_cmd, distros):
         cmd_parts  = distro_cmd.split()
@@ -2202,24 +2450,19 @@ class QuickboxWindow(QMainWindow):
         dl_btn.clicked.connect(lambda: _close_and_select() if dl_btn.text() in (S["dl2_done_close"], S["btn_close"]) else _start())
         cancel_btn.clicked.connect(_cancel)
         dlg.finished.connect(_on_dialog_close)
-        dlg.exec()
+        dlg.show()
 
     # ── custom VM ─────────────────────────────────────────────────────────────────
     def _dlg_custom(self, *_):
-        src_path, _ = QFileDialog.getOpenFileName(
-            self, S["cvm_file_title"], str(Path.home()),
-            "Disk images (*.iso *.img)")
-        if not src_path:
-            return
-        src_path = Path(src_path)
-
+        # Step 1: name
         dlg = QDialog(self)
         dlg.setWindowTitle(S["cvm_title"])
         dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(380, 150)
         v = QVBoxLayout(dlg)
         v.addWidget(QLabel(S["cvm_name_lbl"]))
-        name_entry = QLineEdit(src_path.stem.replace(" ", "-"))
+        name_entry = QLineEdit(S["cvm_name_def"])
+        name_entry.selectAll()
         v.addWidget(name_entry)
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         btns.button(QDialogButtonBox.StandardButton.Ok).setText(S["btn_next"])
@@ -2240,47 +2483,56 @@ class QuickboxWindow(QMainWindow):
             self._warn(S["warn_exists_t"], S["warn_exists_b"].format(dest_name))
             return
 
-        ssh_port = get_next_ssh_port(self.vms_dir, dest_name)
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        is_img = src_path.suffix.lower() == ".img"
+        # Step 2: file picker
+        src_str, _ = QFileDialog.getOpenFileName(
+            self, S["cvm_file_title"], str(Path.home()),
+            "Disk images (*.iso *.img *.ISO *.IMG)")
+        if not src_str:
+            return
+        src_path = Path(src_str)
 
-        flag = Path(self.vms_dir) / f".{dest_name}.copying"
-        flag.write_text(str(src_path.stat().st_size))
-        self._refresh()
+        ssh_port  = get_next_ssh_port(self.vms_dir, dest_name)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        is_img    = src_path.suffix.lower() == ".img"
+        dest_iso  = dest_dir / src_path.name
+        flag      = Path(self.vms_dir) / f".{dest_name}.copying"
 
         if is_img:
-            disk = str(dest_dir / "disk.qcow2")
             conf_text = (f"#!/usr/bin/quickemu --vm\nguest_os=\"linux\"\n"
                          f"disk_img=\"{dest_name}/disk.qcow2\"\n"
                          f"pretty=\"{vm_name}\"\nssh_port=\"{ssh_port}\"\n"
                          f"boot=legacy\ncompat_mode=true\ndisk_if=ide\nnet_device=e1000\n")
-            dest_conf.write_text(conf_text)
-            dest_conf.chmod(0o755)
-            notify("quickbox", S["ntf_converting"].format(src_path.name), "low")
-            worker = ConvertWorker(str(src_path), disk)
-            worker.done.connect(lambda ok, err: (
-                flag.unlink(missing_ok=True),
-                notify("quickbox", f"VM {vm_name} created!") if ok
-                else self._warn("Conversion failed", err),
-                self._refresh()))
-            self._track_worker(worker)
-            worker.start()
         else:
-            dest_iso = dest_dir / src_path.name
             conf_text = (f"#!/usr/bin/quickemu --vm\nguest_os=\"linux\"\n"
                          f"disk_img=\"{dest_name}/disk.qcow2\"\n"
                          f"iso=\"{dest_name}/{src_path.name}\"\n"
                          f"pretty=\"{vm_name}\"\nssh_port=\"{ssh_port}\"\n")
-            dest_conf.write_text(conf_text)
-            dest_conf.chmod(0o755)
-            notify("quickbox", S["ntf_copying"].format(src_path.name), "low")
-            worker = CopyWorker(src_path, dest_iso, flag)
+
+        dest_conf.write_text(conf_text)
+        dest_conf.chmod(0o755)
+        flag.write_text(str(src_path.stat().st_size))
+        self._refresh()
+
+        if is_img:
+            notify("quickbox", S["ntf_converting"].format(src_path.name), "low")
+            worker = ConvertWorker(str(src_path), str(dest_dir / "disk.qcow2"))
             worker.done.connect(lambda ok, err: (
-                notify("quickbox", f"VM {vm_name} created!") if ok
+                flag.unlink(missing_ok=True),
+                notify("quickbox", S["ntf_vm_created"].format(vm_name)) if ok
+                else self._warn("Conversion failed", err),
+                self._refresh()),
+                Qt.ConnectionType.QueuedConnection)
+        else:
+            notify("quickbox", S["ntf_copying"].format(src_path.name), "low")
+            worker = CopyWorker(str(src_path), str(dest_iso), flag)
+            worker.done.connect(lambda ok, err: (
+                notify("quickbox", S["ntf_vm_created"].format(vm_name)) if ok
                 else self._warn("Copy failed", err),
-                self._refresh()))
-            self._track_worker(worker)
-            worker.start()
+                self._refresh()),
+                Qt.ConnectionType.QueuedConnection)
+
+        self._track_worker(worker)
+        worker.start()
 
     # ── advanced ──────────────────────────────────────────────────────────────────
     def _dlg_advanced(self, *_):
@@ -2308,7 +2560,7 @@ class QuickboxWindow(QMainWindow):
         cv.addWidget(cur_lbl)
 
         mig_btn = QPushButton(S["adv_migrate"])
-        mig_btn.clicked.connect(lambda: (dlg.close(), self._dlg_migrate()))
+        mig_btn.clicked.connect(lambda: (dlg.close(), QTimer.singleShot(0, self._dlg_migrate)))
         cv.addWidget(mig_btn)
 
         add_btn = QPushButton(S["adv_add_loc"])
@@ -2335,27 +2587,6 @@ class QuickboxWindow(QMainWindow):
         loc_list_w = QWidget()
         cv.addWidget(loc_list_w)
         self._refresh_loc_list(loc_list_w, dlg)
-
-        cv.addWidget(make_sep())
-        cv.addWidget(make_section(S["adv_sec_distro"]))
-        upd_btn = QPushButton(S["adv_update_dl"])
-        upd_hint = QLabel(S["adv_update_hint"])
-        upd_hint.setStyleSheet("font-size:11px;")
-        upd_hint.setWordWrap(True)
-        def _update_distros():
-            upd_btn.setEnabled(False)
-            upd_btn.setText(S["distro_updating"])
-            worker = UpdateDistroWorker()
-            def _on_done(ok, msg):
-                upd_btn.setEnabled(True)
-                upd_btn.setText(S["adv_update_dl"])
-                notify("Quickbox", msg, "low" if ok else "critical")
-            worker.done.connect(_on_done)
-            self._track_worker(worker)
-            worker.start()
-        upd_btn.clicked.connect(_update_distros)
-        cv.addWidget(upd_btn)
-        cv.addWidget(upd_hint)
 
         cv.addWidget(make_sep())
         cv.addWidget(make_section(S["adv_sec_prof"]))
@@ -2387,6 +2618,24 @@ class QuickboxWindow(QMainWindow):
         btn_row.addWidget(close_btn)
         v.addLayout(btn_row)
         dlg.exec()
+
+    def _update_distros(self):
+        self._distro_btn.setEnabled(False)
+        spin = QProgressBar()
+        spin.setRange(0, 0)
+        spin.setFixedSize(120, 16)
+        spin.setTextVisible(False)
+        self._status.addPermanentWidget(spin)
+        self._status.showMessage(S["distro_updating"])
+        worker = UpdateDistroWorker()
+        def _on_done(ok, msg):
+            self._distro_btn.setEnabled(True)
+            self._status.removeWidget(spin)
+            self._status.showMessage(msg, 5000)
+            notify("Quickbox", msg, "low" if ok else "critical")
+        worker.done.connect(_on_done)
+        self._track_worker(worker)
+        worker.start()
 
     def _refresh_loc_list(self, container, dlg):
         # Clear and rebuild the saved locations list widget
@@ -2499,47 +2748,33 @@ class QuickboxWindow(QMainWindow):
         all_btn.clicked.connect(lambda: [c.setChecked(True)  for c in checks if c.isEnabled()])
         none_btn.clicked.connect(lambda: [c.setChecked(False) for c in checks])
 
-        # destination picker
-        dest_row = QHBoxLayout()
-        pick_btn = QPushButton(S["btn_pick_dest"])
-        dest_lbl = QLabel(S["mig_no_dest"])
-        dest_lbl.setStyleSheet("font-size:11px;")
-        dest_row.addWidget(pick_btn)
-        dest_row.addWidget(dest_lbl, 1)
-        v.addLayout(dest_row)
-        dest = [None]
-
-        def _pick():
-            d = QFileDialog.getExistingDirectory(self, S["btn_pick_dest"], str(Path.home()))
-            if d:
-                dest[0] = d
-                dest_lbl.setText(d)
-        pick_btn.clicked.connect(_pick)
-
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         btns.accepted.connect(dlg.accept)
         btns.rejected.connect(dlg.reject)
         v.addWidget(btns)
 
-        if dlg.exec() != QDialog.DialogCode.Accepted or not dest[0]:
-            return
-        if dest[0] == self.vms_dir:
-            self._warn(S["warn_same_loc_t"], S["warn_same_loc_b"])
+        if dlg.exec() != QDialog.DialogCode.Accepted:
             return
 
         selected = [c.property("vm") for c in checks if c.isChecked()]
         if not selected:
             return
 
+        dest_dir = QFileDialog.getExistingDirectory(self, S["btn_pick_dest"], str(Path.home()))
+        if not dest_dir:
+            return
+        if dest_dir == self.vms_dir:
+            self._warn(S["warn_same_loc_t"], S["warn_same_loc_b"])
+            return
+
         names = "\n  • " + "\n  • ".join(v["_pretty"] for v in selected)
         if not self._confirm(S["dlg_migrate_t"],
-                             S["dlg_migrate_b"].format(len(selected), dest[0], names)):
+                             S["dlg_migrate_b"].format(len(selected), dest_dir, names)):
             return
 
         prog = self._progress_dialog(S["mig_title"])
 
         def _do_migrate():
-            dest_dir = dest[0]
             Path(dest_dir).mkdir(parents=True, exist_ok=True)
             # one rsync call per VM (dir + conf)
             ok = True
@@ -2559,18 +2794,21 @@ class QuickboxWindow(QMainWindow):
                     ok = False
             QMetaObject.invokeMethod(prog, "close", Qt.ConnectionType.QueuedConnection)
             if ok:
-                self._sig_ask_delete_originals.emit(selected, dest_dir)
+                self._sig_migration_done.emit(selected, dest_dir)
             else:
                 self._sig_migration_failed.emit()
 
         threading.Thread(target=_do_migrate, daemon=True).start()
 
-    def _ask_delete_originals(self, selected, dest):
-        names = "\n  • " + "\n  • ".join(v["_pretty"] for v in selected)
-        r = QMessageBox.question(self, S["dlg_danger_t"],
-            S["dlg_danger_b"].format(len(selected), self.vms_dir, names),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if r == QMessageBox.StandardButton.Yes:
+
+    def _on_migration_done(self, selected, dest_dir):
+        r = QMessageBox.question(
+            self, S["mig_title"],
+            S["mig_keep_originals_q"],
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if r == QMessageBox.StandardButton.No:
             for vm in selected:
                 shutil.rmtree(str(Path(self.vms_dir) / vm["_name"]), ignore_errors=True)
                 Path(vm["_conf"]).unlink(missing_ok=True)
@@ -2628,7 +2866,8 @@ class QuickboxWindow(QMainWindow):
 
     def _progress_dialog(self, title):
         from PySide6.QtWidgets import QProgressDialog
-        pd = QProgressDialog(S["prog_wait"], None, 0, 0, self)
+        pd = QProgressDialog(S["prog_wait"], "", 0, 0, self)
+        pd.setCancelButton(None)
         pd.setWindowTitle(title)
         pd.setWindowIcon(QIcon.fromTheme("quickbox"))
         pd.setWindowModality(Qt.WindowModality.ApplicationModal)
