@@ -946,14 +946,12 @@ class _TabFix(QObject):
 # ── main window ────────────────────────────────────────────────────────────────
 class QuickboxWindow(QMainWindow):
     _sig_refresh_panel       = Signal(object)
-    _sig_ask_delete_originals = Signal(object, str)
     _sig_migration_failed    = Signal()
     _sig_status              = Signal(str)
 
     def __init__(self):
         super().__init__()
         self._sig_refresh_panel.connect(self._refresh_panel)
-        self._sig_ask_delete_originals.connect(self._ask_delete_originals)
         self._sig_migration_failed.connect(self._warn_migration_failed)
         self._sig_status.connect(lambda msg: self._status.showMessage(msg, 4000))
         self.conf        = read_conf()
@@ -2810,30 +2808,11 @@ class QuickboxWindow(QMainWindow):
                 if r2.returncode != 0:
                     ok = False
             QMetaObject.invokeMethod(prog, "close", Qt.ConnectionType.QueuedConnection)
-            if ok:
-                self._sig_ask_delete_originals.emit(selected, dest_dir)
-            else:
+            if not ok:
                 self._sig_migration_failed.emit()
 
         threading.Thread(target=_do_migrate, daemon=True).start()
 
-    def _ask_delete_originals(self, selected, dest):
-        names = "\n  • " + "\n  • ".join(v["_pretty"] for v in selected)
-        mb = QMessageBox(self)
-        mb.setWindowTitle(S["dlg_danger_t"])
-        mb.setText(S["dlg_danger_b"].format(len(selected), self.vms_dir, names))
-        mb.setIcon(QMessageBox.Icon.Warning)
-        yes_btn = mb.addButton(QMessageBox.StandardButton.Yes)
-        yes_btn.setStyleSheet("background-color: #c0392b; color: white; font-weight: bold;")
-        mb.addButton(QMessageBox.StandardButton.No)
-        mb.setDefaultButton(QMessageBox.StandardButton.No)
-        mb.exec()
-        if mb.clickedButton() == yes_btn:
-            for vm in selected:
-                shutil.rmtree(str(Path(self.vms_dir) / vm["_name"]), ignore_errors=True)
-                Path(vm["_conf"]).unlink(missing_ok=True)
-        self._refresh()
-        self._show_welcome()
 
     def _warn_migration_failed(self):
         self._warn(S["warn_mig_fail_t"], S["warn_mig_fail_b"])
