@@ -961,6 +961,7 @@ class QuickboxWindow(QMainWindow):
         self._conf_mtimes   = {}
         self._vms_dir_mtime = 0
         self._active_workers = set()
+        self._hidden_wins    = []
 
         # Clean stale copy flags
         for f in Path(self.vms_dir).glob(".*.copying"):
@@ -1219,7 +1220,7 @@ class QuickboxWindow(QMainWindow):
         self._tray_menu = QMenu()
         self._tray_menu.aboutToShow.connect(self._rebuild_tray_menu)
         self._tray.setContextMenu(self._tray_menu)
-        self._tray.activated.connect(lambda r: self._tray_show() if r == QSystemTrayIcon.ActivationReason.Trigger else None)
+        self._tray.activated.connect(lambda r: self._tray_toggle() if r == QSystemTrayIcon.ActivationReason.Trigger else None)
         if self.conf.get("systray") == "true":
             self._tray.show()
 
@@ -1295,9 +1296,20 @@ class QuickboxWindow(QMainWindow):
         self.show()
         self.raise_()
         self.activateWindow()
+        # restore windows hidden by the last toggle, raised above main
+        for w in list(self._hidden_wins):
+            w.show()
+            w.raise_()
+        self._hidden_wins.clear()
 
     def _tray_toggle(self):
         if self.isVisible():
+            self._hidden_wins = [
+                w for w in QApplication.topLevelWidgets()
+                if w is not self and isinstance(w, QWidget) and w.isVisible()
+            ]
+            for w in self._hidden_wins:
+                w.hide()
             self.hide()
         else:
             self._tray_show()
