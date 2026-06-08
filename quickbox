@@ -6,8 +6,6 @@ import sys, os, socket, subprocess, threading, glob, shutil, datetime, html
 sys.argv[0] = "quickbox"
 from pathlib import Path
 
-import gi  # noqa — only needed for version check guard below
-
 def _resolve_quickget():
     """Find quickget, checking common locations GUI sessions may not have on PATH."""
     found = shutil.which("quickget")
@@ -81,8 +79,6 @@ _lang = (_locale.getlocale()[0] or "en")[:2]
 
 S = {
     "app_title": "Quickbox",
-    "hdr_download": "Download", "hdr_custom_vm": "Custom VM",
-    "hdr_advanced": "Advanced", "hdr_tray": "Tray",
     "tt_download": "Download a new distro ISO via quickget",
     "tt_custom_vm": "Create a VM from a local ISO or IMG file",
     "tt_advanced": "Migrate VMs, switch location, manage saved paths",
@@ -101,7 +97,6 @@ S = {
     "sec_actions": "ACTIONS",
     "sec_danger":  "DANGER ZONE",
     "vm_copying": "⏳ Importing…",
-    "vm_running": "VM is running",
     "btn_stop": "Stop VM", "btn_launch": "Launch VM",
     "btn_hide": "Hide", "btn_show": "Show",
     "btn_cancel": "Cancel", "btn_close": "Close",
@@ -121,7 +116,6 @@ S = {
     "snap_entry_ph": "New snapshot tag…",
     "snap_create": "Create snapshot",
     "snap_apply": "Apply", "snap_delete": "Delete",
-    "snap_active": "Active: {}",
     "snap_autosave_chk": "Save current state first as:",
     "snap_autosave_skip": "Disk already at this snapshot — no backup needed",
     "snap_autosave_done": "Current state saved as '{}'",
@@ -138,7 +132,6 @@ S = {
     "tt_resize_disk": "Grow the disk non-destructively — keeps all data",
     "rsz_title": "Resize disk", "rsz_cur_lbl": "Current size:",
     "rsz_size_lbl": "New total size (GB):",
-    "rsz_warn_small": "New size must be larger than current size ({} GB).",
     "btn_resize": "Resize",
     "dlg_rsz_t": "Resize disk?",
     "dlg_rsz_b": "Grow disk to {}GB. The existing data will be kept.\nYou may need to resize the partition inside the VM afterwards.",
@@ -172,24 +165,18 @@ S = {
     "dl2_cmd_lbl": "Command:",
     "dl2_ready": "Ready to download",
     "dl2_starting": "Starting download…",
-    "dl2_progress": "Downloading… {} MB  ({} MB/s)",
     "dl2_verifying": "Verifying…",
     "dl2_done": "Download complete!",
     "dl2_failed": "Download failed.",
     "dl2_cancelled": "Cancelled",
-    "dl2_connecting": "Connecting… ({}s)",
-    "dl2_unreachable": "Server unreachable — edit command or check VPN, then retry",
     "dl2_note": "If the timer is counting, the connection is active — slow servers may take a minute or more to start.",
-    "dl2_search_ph": "Search distros…",
     "cvm_title": "Create Custom VM",
     "cvm_name_lbl": "Enter a name for the new VM:",
     "cvm_name_def": "My custom VM",
     "cvm_file_title": "Select ISO or IMG file",
-    "cvm_filter": "Disk images (*.iso *.img)",
     "adv_title": "Advanced",
     "adv_cur_dir": "Current VMs directory:",
     "adv_sec_loc": "LOCATION MANAGEMENT",
-    "adv_sec_distro": "DISTRO LIST MANAGEMENT",
     "adv_sec_prof": "PROFILES MANAGEMENT",
     "adv_sec_saved": "SAVED LOCATIONS (click to switch)",
     "adv_migrate": "Migrate VMs to new location",
@@ -208,9 +195,8 @@ S = {
     "mig_all": "Select all", "mig_none": "Select none",
     "mig_running_tag": "  [running]",
     "mig_stop_tt": "Stop the VM before migrating",
-    "mig_no_dest": "No destination selected",
     "btn_pick_dest": "Select destination…",
-    "prog_wait": "Please wait…", "prog_done": "Done!", "prog_fail": "Failed.",
+    "prog_wait": "Please wait…",
     "distro_updating": "Updating distro list...",
     "ntf_launching": "Launching {}",
     "ntf_snap_created": "Snapshot '{}' created.",
@@ -235,8 +221,6 @@ S = {
     "dlg_migrate_t": "Start migration?",
     "dlg_migrate_b": "Copy {} VM(s) to:\n{}\n{}",
     "mig_keep_originals_q": "Leave the migrated VMs in their original location?",
-    "btn_confirm_yes": "Yes", "btn_confirm_no": "Cancel",
-    "btn_keep": "No, keep files", "btn_delete_orig": "Yes, delete originals",
     "warn_exists_t": "Already exists", "warn_exists_b": "VM '{}' already exists.",
     "warn_clone_t": "Clone failed", "warn_clone_conf": "Could not write conf: {}",
     "warn_clone_dir": "Directory copy failed: {}",
