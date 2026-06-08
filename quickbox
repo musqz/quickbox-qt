@@ -2491,6 +2491,19 @@ class QuickboxWindow(QMainWindow):
         dest_dir.mkdir(parents=True, exist_ok=True)
         is_img = src_path.suffix.lower() == ".img"
 
+        if is_img:
+            conf_text = (f"#!/usr/bin/quickemu --vm\nguest_os=\"linux\"\n"
+                         f"disk_img=\"{dest_name}/disk.qcow2\"\n"
+                         f"pretty=\"{vm_name}\"\nssh_port=\"{ssh_port}\"\n"
+                         f"boot=legacy\ncompat_mode=true\ndisk_if=ide\nnet_device=e1000\n")
+        else:
+            conf_text = (f"#!/usr/bin/quickemu --vm\nguest_os=\"linux\"\n"
+                         f"disk_img=\"{dest_name}/disk.qcow2\"\n"
+                         f"iso=\"{dest_name}/{src_path.name}\"\n"
+                         f"pretty=\"{vm_name}\"\nssh_port=\"{ssh_port}\"\n")
+        dest_conf.write_text(conf_text)
+        dest_conf.chmod(0o755)
+
         flag = Path(self.vms_dir) / f".{dest_name}.copying"
         flag.write_text(str(src_path.stat().st_size))
         self._refresh()
@@ -2498,12 +2511,6 @@ class QuickboxWindow(QMainWindow):
 
         if is_img:
             disk = str(dest_dir / "disk.qcow2")
-            conf_text = (f"#!/usr/bin/quickemu --vm\nguest_os=\"linux\"\n"
-                         f"disk_img=\"{dest_name}/disk.qcow2\"\n"
-                         f"pretty=\"{vm_name}\"\nssh_port=\"{ssh_port}\"\n"
-                         f"boot=legacy\ncompat_mode=true\ndisk_if=ide\nnet_device=e1000\n")
-            dest_conf.write_text(conf_text)
-            dest_conf.chmod(0o755)
             notify("quickbox", S["ntf_converting"].format(src_path.name), "low")
             worker = ConvertWorker(str(src_path), disk)
             worker.done.connect(lambda ok, err: (
@@ -2516,12 +2523,6 @@ class QuickboxWindow(QMainWindow):
             worker.start()
         else:
             dest_iso = dest_dir / src_path.name
-            conf_text = (f"#!/usr/bin/quickemu --vm\nguest_os=\"linux\"\n"
-                         f"disk_img=\"{dest_name}/disk.qcow2\"\n"
-                         f"iso=\"{dest_name}/{src_path.name}\"\n"
-                         f"pretty=\"{vm_name}\"\nssh_port=\"{ssh_port}\"\n")
-            dest_conf.write_text(conf_text)
-            dest_conf.chmod(0o755)
             notify("quickbox", S["ntf_copying"].format(src_path.name), "low")
             worker = CopyWorker(src_path, dest_iso, flag)
             worker.done.connect(lambda ok, err: (
