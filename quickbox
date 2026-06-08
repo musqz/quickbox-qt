@@ -233,9 +233,8 @@ S = {
     "dlg_fmt_t": "Format disk?",
     "dlg_fmt_b": "This will create a new {}GB disk with layout: {}\n\nAll existing data will be lost.",
     "dlg_migrate_t": "Start migration?",
-    "dlg_migrate_b": "Copy {} VM(s) to:\n{}\n{}\n\nOriginals will remain unless you confirm removal afterwards.",
-    "dlg_danger_t": "Remove original files?",
-    "dlg_danger_b": "Migration succeeded.\n\nPermanently DELETE the {} migrated VM(s) from:\n{}\n{}\n\nThis cannot be undone.",
+    "dlg_migrate_b": "Copy {} VM(s) to:\n{}\n{}",
+    "mig_keep_originals_q": "Leave the migrated VMs in their original location?",
     "btn_confirm_yes": "Yes", "btn_confirm_no": "Cancel",
     "btn_keep": "No, keep files", "btn_delete_orig": "Yes, delete originals",
     "warn_exists_t": "Already exists", "warn_exists_b": "VM '{}' already exists.",
@@ -946,12 +945,14 @@ class _TabFix(QObject):
 # ── main window ────────────────────────────────────────────────────────────────
 class QuickboxWindow(QMainWindow):
     _sig_refresh_panel       = Signal(object)
+    _sig_migration_done      = Signal(object, str)
     _sig_migration_failed    = Signal()
     _sig_status              = Signal(str)
 
     def __init__(self):
         super().__init__()
         self._sig_refresh_panel.connect(self._refresh_panel)
+        self._sig_migration_done.connect(self._on_migration_done)
         self._sig_migration_failed.connect(self._warn_migration_failed)
         self._sig_status.connect(lambda msg: self._status.showMessage(msg, 4000))
         self.conf        = read_conf()
@@ -2808,11 +2809,27 @@ class QuickboxWindow(QMainWindow):
                 if r2.returncode != 0:
                     ok = False
             QMetaObject.invokeMethod(prog, "close", Qt.ConnectionType.QueuedConnection)
-            if not ok:
+            if ok:
+                self._sig_migration_done.emit(selected, dest_dir)
+            else:
                 self._sig_migration_failed.emit()
 
         threading.Thread(target=_do_migrate, daemon=True).start()
 
+
+    def _on_migration_done(self, selected, dest_dir):
+        r = QMessageBox.question(
+            self, S["mig_title"],
+            S["mig_keep_originals_q"],
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if r == QMessageBox.StandardButton.No:
+            for vm in selected:
+                shutil.rmtree(str(Path(self.vms_dir) / vm["_name"]), ignore_errors=True)
+                Path(vm["_conf"]).unlink(missing_ok=True)
+        self._refresh()
+        self._show_welcome()
 
     def _warn_migration_failed(self):
         self._warn(S["warn_mig_fail_t"], S["warn_mig_fail_b"])
