@@ -14,6 +14,6 @@ pkgbase = quickbox-qt
 	provides = quickbox
 	conflicts = quickbox
 	source = quickbox-qt-1.2.4.tar.gz::https://github.com/musqz/quickbox-qt/archive/v1.2.4.tar.gz
-	sha256sums = SKIP
+	sha256sums = 9abc7b14bd90b1959ee57556598b0e52ce44ed5c8690fd1d55ca4a7cb3b631e8
 
 pkgname = quickbox-qt
