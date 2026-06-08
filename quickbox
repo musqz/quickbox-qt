@@ -666,111 +666,99 @@ class DownloadWorker(QThread):
                 pass
 
     def run(self):
-        import math, time, re
+        import time, re, select as _sel, os as _os, shlex as _shlex
         self.progress.emit(S["dl2_starting"], -1.0)
-        t0 = time.monotonic()
-        self._total_bytes = 0
-        self._curl_active = False
+        t0     = time.monotonic()
+        total_mb    = None
+        got_progress = False
+        rc = 1
 
-        def _find_file():
-            try:
-                cutoff = t0 - 2.0
-                files = []
-                for f in Path(self.vms_dir).rglob("*"):
-                    if f.is_file() and f.suffix.lower() in (
-                            ".iso", ".img", ".qcow2", ".gz", ".xz", ".zip",
-                            ".part", ".tmp", ".download"):
-                        st = f.stat()
-                        if st.st_mtime >= cutoff:
-                            files.append((st.st_mtime, f))
-                return sorted(files)[-1][1] if files else None
-            except Exception:
-                return None
+        def _fmt_size(mb):
+            return f"{mb / 1024:.1f} GB" if mb >= 1024 else f"{mb:.0f} MB"
 
-        def _watch():
-            elapsed, last_size, last_mb, target, stall = 0, 0, 0.0, None, 0
-            while not self._cancel:
-                time.sleep(1)
-                elapsed += 1
-                if self._curl_active:
-                    continue
-                dot = "." * (elapsed % 4)   # animated pulse: "", ".", "..", "..."
-                if target is None or not target.exists():
-                    target = _find_file()
-                if target and target.exists():
-                    try:
-                        size = target.stat().st_size
-                        mb   = size / (1024 * 1024)
-                        if size > last_size:
-                            frac = math.log1p(mb) / (math.log1p(mb) + 8)
-                            speed = (size - last_size) / (1024 * 1024)
-                            last_mb, last_size, stall = mb, size, 0
-                            self.progress.emit(
-                                S["dl2_progress"].format(f"{mb:.0f}", f"{speed:.1f}"),
-                                min(frac, 0.95))
-                        else:
-                            stall += 1
-                            if stall >= 5:
-                                # indeterminate (-1) signals pulsing bar
-                                self.progress.emit(
-                                    f"Server is slow — {last_mb:.0f} MB received, still connected{dot}  ({stall}s)",
-                                    -1.0)
-                            else:
-                                self.progress.emit(
-                                    S["dl2_progress"].format(f"{last_mb:.0f}", "–"),
-                                    min(math.log1p(last_mb) / (math.log1p(last_mb) + 8), 0.95))
-                    except Exception:
-                        pass
-                else:
-                    if elapsed <= 3:
-                        self.progress.emit(S["dl2_starting"], -1.0)
-                    else:
-                        hint = "  —  slow servers may take a minute" if elapsed > 15 else ""
-                        self.progress.emit(
-                            f"Contacting server{dot}  ({elapsed}s){hint}", -1.0)
-
-        watcher = threading.Thread(target=_watch, daemon=True)
-        watcher.start()
         try:
-            import shlex as _shlex
-            qg_bin = _resolve_quickget() or "quickget"
-            cmd = [qg_bin] + self.cmd[1:]
-            _shell = os.environ.get("SHELL", "/bin/sh")
+            qg_bin   = _resolve_quickget() or "quickget"
+            cmd      = [qg_bin] + self.cmd[1:]
+            _shell   = _os.environ.get("SHELL", "/bin/sh")
             _cmd_str = " ".join(_shlex.quote(c) for c in cmd)
             Path(self.vms_dir).mkdir(parents=True, exist_ok=True)
             self._proc = subprocess.Popen(
                 [_shell, "-c", _cmd_str],
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                cwd=self.vms_dir)
-            _clen_re = re.compile(rb'Content-Length:\s*(\d+)', re.IGNORECASE)
-            _prog_re = re.compile(rb'^\s*(\d+)\s+(\d+(?:\.\d+)?)%')
-            for raw in self._proc.stdout:
-                m = _clen_re.search(raw)
-                if m:
-                    self._total_bytes = int(m.group(1))
+                cwd=self.vms_dir, bufsize=0)
+
+            fd      = self._proc.stdout.fileno()
+            buf     = b""
+            _cl_re  = re.compile(r'^content-length:\s*(\d+)',    re.IGNORECASE)
+            _cr_re  = re.compile(r'^content-range:[^/]*/(\d+)',  re.IGNORECASE)
+            _pct_re = re.compile(r'([\d.]+)%')
+
+            while True:
+                ready = _sel.select([fd], [], [], 0.5)[0]
+                if ready:
+                    try:
+                        chunk = _os.read(fd, 512)
+                    except OSError:
+                        break
+                    if not chunk:
+                        break
+                    buf += chunk
+                else:
+                    if self._proc.poll() is not None:
+                        break
+                    if not got_progress:
+                        elapsed = int(time.monotonic() - t0)
+                        if elapsed <= 3:
+                            self.progress.emit(S["dl2_starting"], -1.0)
+                        else:
+                            hint = "  —  slow servers may take a minute" if elapsed > 15 else ""
+                            self.progress.emit(f"Contacting server… ({elapsed}s){hint}", -1.0)
                     continue
-                m = _prog_re.match(raw)
-                if m:
-                    self._curl_active = True
-                    done_bytes = int(m.group(1))
-                    pct = float(m.group(2)) / 100.0
-                    done_mb = done_bytes / (1024 * 1024)
-                    if self._total_bytes:
-                        gb_total = self._total_bytes / (1024 ** 3)
+
+                while True:
+                    r = buf.find(b"\r")
+                    n = buf.find(b"\n")
+                    if r == -1 and n == -1:
+                        break
+                    pos     = n if (r == -1 or (n != -1 and n < r)) else r
+                    segment = buf[:pos].decode(errors="replace").strip()
+                    buf     = buf[pos + 1:]
+                    if not segment:
+                        continue
+                    m = _cl_re.search(segment)
+                    if m:
+                        total_mb = int(m.group(1)) / (1024 * 1024)
+                        continue
+                    m = _cr_re.search(segment)
+                    if m:
+                        total_mb = int(m.group(1)) / (1024 * 1024)
+                        continue
+                    m = _pct_re.search(segment)
+                    if m:
+                        pct = float(m.group(1))
+                        got_progress = True
+                        size_str = f" of {_fmt_size(total_mb)}" if total_mb else ""
                         self.progress.emit(
-                            f"{done_mb:.0f} MB / {gb_total:.1f} GB",
-                            min(pct, 0.95))
-                    else:
-                        self.progress.emit(f"{done_mb:.0f} MB", -1.0)
+                            f"Downloading… {pct:.1f}%{size_str}",
+                            min(pct / 100.0, 0.99))
+                    elif not got_progress:
+                        self.progress.emit(segment[:80], -1.0)
+
+            if buf.strip():
+                segment = buf.decode(errors="replace").strip()
+                if not _pct_re.search(segment) and not got_progress:
+                    self.progress.emit(segment[:80], -1.0)
+
             self._proc.wait()
             rc = self._proc.returncode
         except Exception:
             rc = 1
-        self._cancel = True
-        import time; time.sleep(1.2)
+
+        time.sleep(1.2)
         if rc == 0:
             self.progress.emit(S["dl2_verifying"], 0.97)
-            import time; time.sleep(1.0)
+            time.sleep(1.0)
             self.progress.emit(S["dl2_done"], 1.0)
         else:
             self.progress.emit(S["dl2_failed"] if not self._cancel else S["dl2_cancelled"], 0.0)
