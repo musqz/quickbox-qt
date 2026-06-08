@@ -556,7 +556,7 @@ class CopyWorker(QThread):
     progress = Signal(str, str)   # (current_size, total_size)
     done     = Signal(bool, str)
 
-    def __init__(self, src, dst, flag_path, orig_name, parent=None):
+    def __init__(self, src, dst, flag_path, orig_name="", parent=None):
         super().__init__(parent)
         self.src       = src
         self.dst       = dst
