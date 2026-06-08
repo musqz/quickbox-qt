@@ -1,6 +1,6 @@
 pkgbase = quickbox-qt
 	pkgdesc = Qt6/PySide6 GUI front-end for quickemu
-	pkgver = 1.2.3
+	pkgver = 1.2.4
 	pkgrel = 1
 	url = https://github.com/musqz/quickbox-qt
 	arch = any
@@ -13,7 +13,7 @@ pkgbase = quickbox-qt
 	optdepends = virt-viewer: SPICE display backend support
 	provides = quickbox
 	conflicts = quickbox
-	source = quickbox-qt-1.2.3.tar.gz::https://github.com/musqz/quickbox-qt/archive/v1.2.3.tar.gz
-	sha256sums = abc9b9295526de040f665c272fd60ad3c193aa15f99dfc41755b534c1376ee07
+	source = quickbox-qt-1.2.4.tar.gz::https://github.com/musqz/quickbox-qt/archive/v1.2.4.tar.gz
+	sha256sums = SKIP
 
 pkgname = quickbox-qt
