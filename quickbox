@@ -2384,9 +2384,17 @@ class QuickboxWindow(QMainWindow):
 
     def _update_distros(self):
         self._distro_btn.setEnabled(False)
+        spin = QProgressBar()
+        spin.setRange(0, 0)
+        spin.setFixedSize(120, 16)
+        spin.setTextVisible(False)
+        self._status.addPermanentWidget(spin)
+        self._status.showMessage(S["distro_updating"])
         worker = UpdateDistroWorker()
         def _on_done(ok, msg):
             self._distro_btn.setEnabled(True)
+            self._status.removeWidget(spin)
+            self._status.showMessage(msg, 5000)
             notify("Quickbox", msg, "low" if ok else "critical")
         worker.done.connect(_on_done)
         self._track_worker(worker)
