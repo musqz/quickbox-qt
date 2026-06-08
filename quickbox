@@ -1240,6 +1240,7 @@ class QuickboxWindow(QMainWindow):
     def _tray_vm_row(self, vm):
         w = QWidget()
         w.setStyleSheet("background: transparent;")
+        w.setCursor(Qt.CursorShape.PointingHandCursor)
         h = QHBoxLayout(w)
         h.setContentsMargins(20, 5, 16, 5)
         h.setSpacing(8)
@@ -1250,12 +1251,20 @@ class QuickboxWindow(QMainWindow):
         name_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         stop_lbl = QLabel(S["tray_stop"])
         stop_lbl.setStyleSheet("color: #e53935; font-size: 11px; background: transparent;")
+        for lbl in (dot, name_lbl, stop_lbl):
+            lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         h.addWidget(dot)
         h.addWidget(name_lbl)
         h.addWidget(stop_lbl)
+
+        def _clicked(e, n=vm["_name"]):
+            if e.button() == Qt.MouseButton.LeftButton:
+                self._tray_menu.hide()
+                self._stop_vm_by_name(n)
+        w.mousePressEvent = _clicked
+
         act = QWidgetAction(self._tray_menu)
         act.setDefaultWidget(w)
-        act.triggered.connect(lambda _, n=vm["_name"]: self._stop_vm_by_name(n))
         return act
 
     def _rebuild_tray_menu(self):
