@@ -119,6 +119,11 @@ S = {
     "snap_autosave_chk": "Save current state first as:",
     "snap_autosave_skip": "Disk already at this snapshot — no backup needed",
     "snap_autosave_done": "Current state saved as '{}'",
+    "snap_creating": "Creating snapshot '{}'…",
+    "snap_applying": "Applying snapshot '{}'…",
+    "snap_saving":   "Saving current state as '{}'…",
+    "snap_deleting": "Deleting snapshot '{}'…",
+    "snap_stale":    "Last applied: {} (deleted)",
     "act_edit_conf": "Edit conf", "act_clone": "Clone VM",
     "act_open_dir": "Open dir", "act_resize_disk": "Resize disk",
     "tt_edit_conf": "Open the VM configuration file in a text editor",
@@ -136,11 +141,11 @@ S = {
     "warn_rsz_fail_b": "qemu-img resize returned an error.",
     "dng_del_disk": "Delete disk", "dng_fmt_disk": "Format disk",
     "dng_del_vm": "Delete VM",
-    "tt_del_disk": "Delete the disk image — quickemu recreates a fresh one on next launch. Use this to reset a VM to a clean state.",
-    "tt_fmt_disk": "Pre-create a partitioned disk with a chosen size and layout. For custom VMs where the installer expects a specific partition structure — not needed for standard quickget VMs.",
+    "tt_del_disk": "Remove the disk image only — keeps ISO and config",
+    "tt_fmt_disk": "Create or re-format the disk — erases all data",
     "tt_del_vm": "Permanently remove all VM files including disk and config",
     "clone_title": "Clone VM", "clone_label": "Clone '{}' as:",
-    "clone_tt": "Name for the cloned VM",
+    "clone_tt": "Name for the cloned VM — date suffix helps track when it was made",
     "clone_hint": "The clone will appear in the VM list as a separate VM.",
     "fmt_title": "Format disk", "fmt_warn": "⚠ This will ERASE all data on the disk!",
     "fmt_size_lbl": "Disk size (GB):", "fmt_layout_lbl": "Partition layout:",
@@ -148,6 +153,10 @@ S = {
     "fmt_layout_msd": "MSDOS — ext4 (whole disk)",
     "fmt_layout_fat": "MSDOS — FAT32 (whole disk)",
     "fmt_layout_raw": "Blank — no partitions (raw qcow2)",
+    "tt_fmt_gpt": "UEFI boot — recommended for modern distros",
+    "tt_fmt_msd": "Legacy/BIOS boot — for SliTaz, TinyCore, older distros",
+    "tt_fmt_fat": "For distros that need FAT32 working partition (e.g. EasyOS style)",
+    "tt_fmt_raw": "Let the distro installer handle partitioning",
     "btn_format": "Format",
     "dl_title": "Download Distro",
     "dl_search_ph": "Search distros…",
@@ -937,12 +946,14 @@ class QuickboxWindow(QMainWindow):
     _sig_refresh_panel       = Signal(object)
     _sig_ask_delete_originals = Signal(object, str)
     _sig_migration_failed    = Signal()
+    _sig_status              = Signal(str)
 
     def __init__(self):
         super().__init__()
         self._sig_refresh_panel.connect(self._refresh_panel)
         self._sig_ask_delete_originals.connect(self._ask_delete_originals)
         self._sig_migration_failed.connect(self._warn_migration_failed)
+        self._sig_status.connect(lambda msg: self._status.showMessage(msg, 4000))
         self.conf        = read_conf()
         self.vms_dir     = self.conf.get("vms_dir", str(Path.home() / "emu"))
         self.vms         = []
@@ -1487,7 +1498,12 @@ class QuickboxWindow(QMainWindow):
             if not snaps:
                 nl = QLabel(S["snap_none"])
                 sv.addWidget(nl)
-            else:
+            elif current_snap and current_snap not in snap_tags:
+                stale = QLabel(S["snap_stale"].format(current_snap))
+                stale.setStyleSheet("color:#888; font-size:11px;")
+                sv.addWidget(stale)
+
+            if snaps:
                 for snap in snaps:
                     row = QWidget()
                     rl  = QHBoxLayout(row)
@@ -1699,6 +1715,7 @@ class QuickboxWindow(QMainWindow):
             return
         worker = SnapWorker("create", vm["_disk"], tag)
         worker.done.connect(lambda ok, err, v=vm, t=tag: self._on_snap_done(ok, err, "create", v, t))
+        self._status.showMessage(S["snap_creating"].format(tag))
         self._track_worker(worker)
         worker.start()
 
@@ -1711,6 +1728,7 @@ class QuickboxWindow(QMainWindow):
             self._warn(S["warn_snap_fail_t"],
                        S["warn_snap_locked"] if ("write" in err.lower() or "lock" in err.lower()) else err),
             self._refresh_and_show(v)))
+        self._status.showMessage(S["snap_deleting"].format(tag))
         self._track_worker(worker)
         worker.start()
 
@@ -1758,10 +1776,12 @@ class QuickboxWindow(QMainWindow):
 
         def _do_apply():
             if save_first:
+                self._sig_status.emit(S["snap_saving"].format(save_name))
                 r = subprocess.run(["qemu-img", "snapshot", "-c", save_name, vm["_disk"]],
                                    capture_output=True)
                 if r.returncode == 0:
                     notify("quickbox", S["snap_autosave_done"].format(save_name))
+            self._sig_status.emit(S["snap_applying"].format(tag))
             r2 = subprocess.run(["qemu-img", "snapshot", "-a", tag, vm["_disk"]],
                                  capture_output=True, text=True)
             if r2.returncode == 0:
@@ -1965,6 +1985,7 @@ class QuickboxWindow(QMainWindow):
         for i, (key, lbl) in enumerate(layouts):
             rb = QRadioButton(lbl)
             rb.setProperty("layout_key", key)
+            rb.setToolTip(S[f"tt_fmt_{key}"])
             grp.addButton(rb)
             v.addWidget(rb)
             if i == 0:
