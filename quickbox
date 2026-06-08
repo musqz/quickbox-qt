@@ -321,6 +321,16 @@ def dir_size(path):
     except Exception:
         return ""
 
+def dir_size_bytes(path):
+    total = 0
+    try:
+        for f in Path(path).rglob("*"):
+            if f.is_file():
+                total += f.stat().st_size
+    except Exception:
+        pass
+    return total
+
 def get_vms(vms_dir):
     vms = []
     for conf_path in sorted(glob.glob(f"{vms_dir}/*.conf")):
@@ -334,12 +344,14 @@ def get_vms(vms_dir):
         vm["_has_disk"] = Path(vm["_disk"]).exists() if vm["_disk"] else False
         flag_path = Path(vms_dir) / f".{vm['_name']}.copying"
         vm["_copying"] = flag_path.exists()
-        vm["_copy_total"] = ""
+        vm["_copy_total_bytes"] = 0
+        vm["_copy_done_bytes"]  = 0
         if vm["_copying"]:
             try:
-                vm["_copy_total"] = fmt_size(int(flag_path.read_text().strip()))
+                vm["_copy_total_bytes"] = int(flag_path.read_text().strip())
             except Exception:
                 pass
+            vm["_copy_done_bytes"] = dir_size_bytes(str(Path(vms_dir) / vm["_name"]))
         vm["_size"] = dir_size(str(Path(vms_dir) / vm["_name"]))
         vms.append(vm)
     vms.sort(key=lambda v: (not v["_running"], v["_has_disk"], v["_name"].lower()))
@@ -375,8 +387,9 @@ def _iso_label(vm, vms_dir):
     if not iso:
         return "—"
     if vm.get("_copying"):
-        total = vm.get("_copy_total", "")
-        return f"{iso}  ({total})" if total else iso
+        total_bytes = vm.get("_copy_total_bytes", 0)
+        total_str = fmt_size(total_bytes) if total_bytes else ""
+        return f"{iso}  ({total_str})" if total_str else iso
     try:
         size = fmt_size(Path(vms_dir, iso).stat().st_size)
         return f"{iso}  ({size})"
@@ -635,9 +648,11 @@ class DownloadWorker(QThread):
                 pass
 
     def run(self):
-        import math, time
+        import math, time, re
         self.progress.emit(S["dl2_starting"], -1.0)
         t0 = time.monotonic()
+        self._total_bytes = 0
+        self._curl_active = False
 
         def _find_file():
             try:
@@ -659,6 +674,8 @@ class DownloadWorker(QThread):
             while not self._cancel:
                 time.sleep(1)
                 elapsed += 1
+                if self._curl_active:
+                    continue
                 dot = "." * (elapsed % 4)   # animated pulse: "", ".", "..", "..."
                 if target is None or not target.exists():
                     target = _find_file()
@@ -705,8 +722,28 @@ class DownloadWorker(QThread):
             Path(self.vms_dir).mkdir(parents=True, exist_ok=True)
             self._proc = subprocess.Popen(
                 [_shell, "-c", _cmd_str],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 cwd=self.vms_dir)
+            _clen_re = re.compile(rb'Content-Length:\s*(\d+)', re.IGNORECASE)
+            _prog_re = re.compile(rb'^\s*(\d+)\s+(\d+(?:\.\d+)?)%')
+            for raw in self._proc.stdout:
+                m = _clen_re.search(raw)
+                if m:
+                    self._total_bytes = int(m.group(1))
+                    continue
+                m = _prog_re.match(raw)
+                if m:
+                    self._curl_active = True
+                    done_bytes = int(m.group(1))
+                    pct = float(m.group(2)) / 100.0
+                    done_mb = done_bytes / (1024 * 1024)
+                    if self._total_bytes:
+                        gb_total = self._total_bytes / (1024 ** 3)
+                        self.progress.emit(
+                            f"{done_mb:.0f} MB / {gb_total:.1f} GB",
+                            min(pct, 0.95))
+                    else:
+                        self.progress.emit(f"{done_mb:.0f} MB", -1.0)
             self._proc.wait()
             rc = self._proc.returncode
         except Exception:
@@ -788,8 +825,13 @@ class VMItemWidget(QWidget):
 
         if vm.get("_copying"):
             center = QHBoxLayout()
-            total = vm.get("_copy_total", "")
-            size_text = f"{vm['_size']} / {total}" if total else vm["_size"]
+            done_bytes  = vm.get("_copy_done_bytes", 0)
+            total_bytes = vm.get("_copy_total_bytes", 0)
+            done_mb = done_bytes / (1024 ** 2)
+            if total_bytes:
+                size_text = f"{done_mb:.0f} MB / {total_bytes / (1024 ** 3):.1f} GB"
+            else:
+                size_text = f"{done_mb:.0f} MB"
             badge = QLabel(f"{size_text}  importing")
             badge.setStyleSheet("background:#e65100; color:white; border-radius:3px; padding:1px 5px; font-size:11px;")
             center.addStretch()
