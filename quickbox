@@ -2297,8 +2297,9 @@ class QuickboxWindow(QMainWindow):
                 break
             name, cmd = selected[0]
             selected[0] = None
+            dlg.close()
             self._dlg_do_download(name, cmd, distros)
-            search.setFocus()
+            break
 
     def _dlg_do_download(self, distro_name, distro_cmd, distros):
         cmd_parts  = distro_cmd.split()
@@ -2447,7 +2448,7 @@ class QuickboxWindow(QMainWindow):
         dl_btn.clicked.connect(lambda: _close_and_select() if dl_btn.text() in (S["dl2_done_close"], S["btn_close"]) else _start())
         cancel_btn.clicked.connect(_cancel)
         dlg.finished.connect(_on_dialog_close)
-        dlg.exec()
+        dlg.show()
 
     # ── custom VM ─────────────────────────────────────────────────────────────────
     def _dlg_custom(self, *_):
