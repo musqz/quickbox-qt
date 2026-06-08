@@ -2765,44 +2765,33 @@ class QuickboxWindow(QMainWindow):
         all_btn.clicked.connect(lambda: [c.setChecked(True)  for c in checks if c.isEnabled()])
         none_btn.clicked.connect(lambda: [c.setChecked(False) for c in checks])
 
-        # destination picker
-        dest_row = QHBoxLayout()
-        pick_btn = QPushButton(S["btn_pick_dest"])
-        dest_row.addWidget(pick_btn)
-        dest_row.addStretch()
-        v.addLayout(dest_row)
-        dest = [None]
-
-        def _pick():
-            d = QFileDialog.getExistingDirectory(self, S["btn_pick_dest"], str(Path.home()))
-            if d:
-                dest[0] = d
-        pick_btn.clicked.connect(_pick)
-
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         btns.accepted.connect(dlg.accept)
         btns.rejected.connect(dlg.reject)
         v.addWidget(btns)
 
-        if dlg.exec() != QDialog.DialogCode.Accepted or not dest[0]:
-            return
-        if dest[0] == self.vms_dir:
-            self._warn(S["warn_same_loc_t"], S["warn_same_loc_b"])
+        if dlg.exec() != QDialog.DialogCode.Accepted:
             return
 
         selected = [c.property("vm") for c in checks if c.isChecked()]
         if not selected:
             return
 
+        dest_dir = QFileDialog.getExistingDirectory(self, S["btn_pick_dest"], str(Path.home()))
+        if not dest_dir:
+            return
+        if dest_dir == self.vms_dir:
+            self._warn(S["warn_same_loc_t"], S["warn_same_loc_b"])
+            return
+
         names = "\n  • " + "\n  • ".join(v["_pretty"] for v in selected)
         if not self._confirm(S["dlg_migrate_t"],
-                             S["dlg_migrate_b"].format(len(selected), dest[0], names)):
+                             S["dlg_migrate_b"].format(len(selected), dest_dir, names)):
             return
 
         prog = self._progress_dialog(S["mig_title"])
 
         def _do_migrate():
-            dest_dir = dest[0]
             Path(dest_dir).mkdir(parents=True, exist_ok=True)
             # one rsync call per VM (dir + conf)
             ok = True
