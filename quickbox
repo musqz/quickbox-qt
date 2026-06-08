@@ -2768,10 +2768,8 @@ class QuickboxWindow(QMainWindow):
         # destination picker
         dest_row = QHBoxLayout()
         pick_btn = QPushButton(S["btn_pick_dest"])
-        dest_lbl = QLabel(S["mig_no_dest"])
-        dest_lbl.setStyleSheet("font-size:11px;")
         dest_row.addWidget(pick_btn)
-        dest_row.addWidget(dest_lbl, 1)
+        dest_row.addStretch()
         v.addLayout(dest_row)
         dest = [None]
 
@@ -2779,7 +2777,6 @@ class QuickboxWindow(QMainWindow):
             d = QFileDialog.getExistingDirectory(self, S["btn_pick_dest"], str(Path.home()))
             if d:
                 dest[0] = d
-                dest_lbl.setText(d)
         pick_btn.clicked.connect(_pick)
 
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
