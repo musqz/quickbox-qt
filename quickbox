@@ -2494,9 +2494,11 @@ class QuickboxWindow(QMainWindow):
             return
         src_path = Path(src_str)
 
-        ssh_port = get_next_ssh_port(self.vms_dir, dest_name)
+        ssh_port  = get_next_ssh_port(self.vms_dir, dest_name)
         dest_dir.mkdir(parents=True, exist_ok=True)
-        is_img = src_path.suffix.lower() == ".img"
+        is_img    = src_path.suffix.lower() == ".img"
+        dest_iso  = dest_dir / src_path.name
+        flag      = Path(self.vms_dir) / f".{dest_name}.copying"
 
         if is_img:
             conf_text = (f"#!/usr/bin/quickemu --vm\nguest_os=\"linux\"\n"
@@ -2508,35 +2510,32 @@ class QuickboxWindow(QMainWindow):
                          f"disk_img=\"{dest_name}/disk.qcow2\"\n"
                          f"iso=\"{dest_name}/{src_path.name}\"\n"
                          f"pretty=\"{vm_name}\"\nssh_port=\"{ssh_port}\"\n")
+
         dest_conf.write_text(conf_text)
         dest_conf.chmod(0o755)
+        flag.write_text(str(src_path.stat().st_size))
         self._refresh()
-        self._select_vm_by_name(dest_name)
 
         if is_img:
-            disk = str(dest_dir / "disk.qcow2")
             notify("quickbox", S["ntf_converting"].format(src_path.name), "low")
-            worker = ConvertWorker(str(src_path), disk)
+            worker = ConvertWorker(str(src_path), str(dest_dir / "disk.qcow2"))
             worker.done.connect(lambda ok, err: (
+                flag.unlink(missing_ok=True),
                 notify("quickbox", S["ntf_vm_created"].format(vm_name)) if ok
                 else self._warn("Conversion failed", err),
-                self._refresh(),
-                self._select_vm_by_name(dest_name)),
+                self._refresh()),
                 Qt.ConnectionType.QueuedConnection)
-            self._track_worker(worker)
-            worker.start()
         else:
-            dest_iso = dest_dir / src_path.name
             notify("quickbox", S["ntf_copying"].format(src_path.name), "low")
-            worker = CopyWorker(str(src_path), str(dest_iso))
+            worker = CopyWorker(str(src_path), str(dest_iso), flag)
             worker.done.connect(lambda ok, err: (
                 notify("quickbox", S["ntf_vm_created"].format(vm_name)) if ok
                 else self._warn("Copy failed", err),
-                self._refresh(),
-                self._select_vm_by_name(dest_name)),
+                self._refresh()),
                 Qt.ConnectionType.QueuedConnection)
-            self._track_worker(worker)
-            worker.start()
+
+        self._track_worker(worker)
+        worker.start()
 
     # ── advanced ──────────────────────────────────────────────────────────────────
     def _dlg_advanced(self, *_):
