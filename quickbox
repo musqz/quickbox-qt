@@ -2819,10 +2819,16 @@ class QuickboxWindow(QMainWindow):
 
     def _ask_delete_originals(self, selected, dest):
         names = "\n  • " + "\n  • ".join(v["_pretty"] for v in selected)
-        r = QMessageBox.question(self, S["dlg_danger_t"],
-            S["dlg_danger_b"].format(len(selected), self.vms_dir, names),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if r == QMessageBox.StandardButton.Yes:
+        mb = QMessageBox(self)
+        mb.setWindowTitle(S["dlg_danger_t"])
+        mb.setText(S["dlg_danger_b"].format(len(selected), self.vms_dir, names))
+        mb.setIcon(QMessageBox.Icon.Warning)
+        yes_btn = mb.addButton(QMessageBox.StandardButton.Yes)
+        yes_btn.setStyleSheet("background-color: #c0392b; color: white; font-weight: bold;")
+        mb.addButton(QMessageBox.StandardButton.No)
+        mb.setDefaultButton(QMessageBox.StandardButton.No)
+        mb.exec()
+        if mb.clickedButton() == yes_btn:
             for vm in selected:
                 shutil.rmtree(str(Path(self.vms_dir) / vm["_name"]), ignore_errors=True)
                 Path(vm["_conf"]).unlink(missing_ok=True)
