@@ -1837,10 +1837,14 @@ class QuickboxWindow(QMainWindow):
         disk_unchanged = (vm.get("current_snap") == tag and vm.get("snap_dirty") != "true")
 
         dlg = QDialog(self)
-        dlg.setWindowTitle(S["dlg_snap_apply_t"].format(tag))
+        dlg.setWindowTitle("Quickbox")
         dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(460, 200)
         v = QVBoxLayout(dlg)
+
+        hdr = QLabel(f"<b>{html.escape(S['dlg_snap_apply_t'].format(tag))}</b>")
+        hdr.setTextFormat(Qt.TextFormat.RichText)
+        v.addWidget(hdr)
 
         warn = QLabel(S["dlg_snap_apply_b"])
         warn.setWordWrap(True)
@@ -1919,7 +1923,7 @@ class QuickboxWindow(QMainWindow):
             return
         suggested = f"{vm['_name']}-{_date_tag()}"
         dlg = QDialog(self)
-        dlg.setWindowTitle(S["clone_title"])
+        dlg.setWindowTitle("Quickbox")
         dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(380, 150)
         v = QVBoxLayout(dlg)
@@ -2004,7 +2008,7 @@ class QuickboxWindow(QMainWindow):
             return
 
         dlg = QDialog(self)
-        dlg.setWindowTitle(S["rsz_title"])
+        dlg.setWindowTitle("Quickbox")
         dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         v = QVBoxLayout(dlg)
         v.addWidget(QLabel(f"{S['rsz_cur_lbl']} {cur_gb} GB"))
@@ -2065,7 +2069,7 @@ class QuickboxWindow(QMainWindow):
 
     def _dlg_format_disk(self, vm):
         dlg = QDialog(self)
-        dlg.setWindowTitle(S["fmt_title"])
+        dlg.setWindowTitle("Quickbox")
         dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(420, 300)
         v = QVBoxLayout(dlg)
@@ -2171,7 +2175,7 @@ class QuickboxWindow(QMainWindow):
         distros = self._parse_quickinst()
         if not distros:
             dlg = QDialog(self)
-            dlg.setWindowTitle(S["dl_title"])
+            dlg.setWindowTitle("Quickbox")
             dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
             dlg.resize(380, 110)
             v = QVBoxLayout(dlg)
@@ -2184,7 +2188,7 @@ class QuickboxWindow(QMainWindow):
             return
 
         dlg = QDialog(self)
-        dlg.setWindowTitle(S["dl_title"])
+        dlg.setWindowTitle("Quickbox")
         dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(640, 520)
         dlg.setMinimumSize(640, 460)
@@ -2332,7 +2336,7 @@ class QuickboxWindow(QMainWindow):
             versions = [(distro_name, distro_cmd)]
 
         dlg = QDialog(self)
-        dlg.setWindowTitle(f"Download — {base_distro}")
+        dlg.setWindowTitle("Quickbox")
         dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(560, 320)
         v = QVBoxLayout(dlg)
@@ -2476,7 +2480,7 @@ class QuickboxWindow(QMainWindow):
     def _dlg_custom(self, *_):
         # Step 1: name
         dlg = QDialog(self)
-        dlg.setWindowTitle(S["cvm_title"])
+        dlg.setWindowTitle("Quickbox")
         dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(380, 150)
         v = QVBoxLayout(dlg)
@@ -2557,7 +2561,7 @@ class QuickboxWindow(QMainWindow):
     # ── advanced ──────────────────────────────────────────────────────────────────
     def _dlg_advanced(self, *_):
         dlg = QDialog(self)
-        dlg.setWindowTitle(S["adv_title"])
+        dlg.setWindowTitle("Quickbox")
         dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(520, 500)
         dlg.setMinimumSize(520, 450)
@@ -2727,7 +2731,7 @@ class QuickboxWindow(QMainWindow):
             return
 
         dlg = QDialog(self)
-        dlg.setWindowTitle(S["mig_title"])
+        dlg.setWindowTitle("Quickbox")
         dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(480, 460)
         v = QVBoxLayout(dlg)
@@ -2823,7 +2827,7 @@ class QuickboxWindow(QMainWindow):
 
     def _on_migration_done(self, selected, dest_dir):
         r = QMessageBox.question(
-            self, S["mig_title"],
+            self, "Quickbox",
             S["mig_keep_originals_q"],
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes,
@@ -2840,7 +2844,7 @@ class QuickboxWindow(QMainWindow):
 
     def _dlg_about(self):
         dlg = QDialog(self)
-        dlg.setWindowTitle("About Quickbox")
+        dlg.setWindowTitle("Quickbox")
         dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
         dlg.resize(320, 220)
         v = QVBoxLayout(dlg)
@@ -2877,18 +2881,23 @@ class QuickboxWindow(QMainWindow):
 
     # ── helpers ───────────────────────────────────────────────────────────────────
     def _confirm(self, title, body):
-        r = QMessageBox.question(self, title, body,
-                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        return r == QMessageBox.StandardButton.Yes
+        # heading lives in the dialog body — the title bar always says Quickbox
+        m = QMessageBox(QMessageBox.Icon.Question, "Quickbox", title,
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, self)
+        m.setInformativeText(body)
+        return m.exec() == QMessageBox.StandardButton.Yes
 
     def _warn(self, title, body):
-        QMessageBox.warning(self, title, body)
+        m = QMessageBox(QMessageBox.Icon.Warning, "Quickbox", title,
+                        QMessageBox.StandardButton.Ok, self)
+        m.setInformativeText(body)
+        m.exec()
 
     def _progress_dialog(self, title):
         from PySide6.QtWidgets import QProgressDialog
-        pd = QProgressDialog(S["prog_wait"], "", 0, 0, self)
+        pd = QProgressDialog(title, "", 0, 0, self)
         pd.setCancelButton(None)
-        pd.setWindowTitle(title)
+        pd.setWindowTitle("Quickbox")
         pd.setWindowIcon(QIcon.fromTheme("quickbox"))
         pd.setWindowModality(Qt.WindowModality.ApplicationModal)
         pd.setMinimumDuration(0)
