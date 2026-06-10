@@ -138,6 +138,8 @@ S = {
     "ntf_rsz_done": "Disk resized to {}GB",
     "warn_rsz_fail_t": "Resize failed",
     "warn_rsz_fail_b": "qemu-img resize returned an error.",
+    "warn_launch_fail_t": "Launch failed",
+    "warn_launch_fail_b": "QEMU exited with code {}.",
     "dng_del_disk": "Delete disk", "dng_fmt_disk": "Format disk",
     "dng_del_vm": "Delete VM",
     "tt_del_disk": "Remove the disk image only — keeps ISO and config",
@@ -227,6 +229,8 @@ S = {
     "warn_no_disk_t": "No disk", "warn_no_disk_b": "Disk image not found.",
     "warn_dup_snap_t": "Duplicate tag", "warn_dup_snap_b": "Snapshot '{}' already exists.",
     "warn_snap_running_b": "Stop the VM before creating a snapshot.",
+    "warn_clone_running_b": "Stop the VM before cloning.",
+    "vm_running": "VM is running",
     "warn_snap_fail_t": "Snapshot failed",
     "warn_snap_locked": "The disk is locked by another process.\nStop the VM first, then try again.",
     "warn_fmt_fail_t": "Format failed", "warn_fmt_fail_b": "Command failed: {}",
@@ -628,7 +632,16 @@ class ConvertWorker(QThread):
                 ["qemu-img", "convert", "-f", "raw", "-O", "qcow2", self.src, self.dst],
                 capture_output=True, text=True)
             if r.returncode == 0:
-                subprocess.run(["qemu-img", "resize", self.dst, "20G"], capture_output=True)
+                # grow to 20G only if smaller — qemu-img refuses to shrink
+                try:
+                    info = _json.loads(subprocess.run(
+                        ["qemu-img", "info", "--output=json", self.dst],
+                        capture_output=True, text=True).stdout)
+                    if int(info.get("virtual-size", 0)) < 20 * 1024 ** 3:
+                        subprocess.run(["qemu-img", "resize", self.dst, "20G"],
+                                       capture_output=True)
+                except Exception:
+                    pass
             self.done.emit(r.returncode == 0, r.stderr.strip())
         except Exception as e:
             self.done.emit(False, str(e))
@@ -1135,6 +1148,8 @@ class QuickboxWindow(QMainWindow):
                     break
 
         self._list.blockSignals(False)
+        if self.current_vm:
+            self._show_panel(self.current_vm)
         return False
 
     def _on_search(self, text):
@@ -1154,8 +1169,6 @@ class QuickboxWindow(QMainWindow):
         changed = any(is_running(v["_name"]) != v["_running"] for v in self.vms)
         if changed:
             self._refresh()
-            if self.current_vm:
-                self._show_panel(self.current_vm)
 
     def _poll_vms_dir(self):
         try:
@@ -1163,8 +1176,6 @@ class QuickboxWindow(QMainWindow):
             if mtime != self._vms_dir_mtime:
                 if self._vms_dir_mtime != 0:
                     self._refresh()
-                    if self.current_vm:
-                        self._show_panel(self.current_vm)
                 self._vms_dir_mtime = mtime
             changed = False
             for p in Path(self.vms_dir).glob("*.conf"):
@@ -1174,8 +1185,6 @@ class QuickboxWindow(QMainWindow):
                     self._conf_mtimes[str(p)] = m
             if changed and self._vms_dir_mtime != 0:
                 self._refresh()
-                if self.current_vm:
-                    self._show_panel(self.current_vm)
         except Exception:
             pass
 
@@ -1278,14 +1287,22 @@ class QuickboxWindow(QMainWindow):
         setconf("notifications", "true" if enabled else "false")
         self.conf["notifications"] = "true" if enabled else "false"
 
+    def _kill_vm_process(self, name):
+        import signal as _signal
+        needle = f"name {name},process={name}"
+        r = subprocess.run(["pgrep", "-fa", "qemu-system"], capture_output=True, text=True)
+        for line in r.stdout.splitlines():
+            if needle in line:
+                try:
+                    os.kill(int(line.split()[0]), _signal.SIGTERM)
+                except (ValueError, ProcessLookupError, PermissionError):
+                    pass
+
     def _stop_vm_by_name(self, name):
         self._raise_window()
         if not self._confirm(S["dlg_stop_t"].format(name), S["dlg_stop_b"]):
             return
-        try:
-            subprocess.run(["pkill", "-TERM", "-f", f"name {name},process={name}"])
-        except Exception:
-            pass
+        self._kill_vm_process(name)
         self._poll_vm_state(name, want_running=False)
 
     def _raise_window(self):
@@ -1375,6 +1392,7 @@ class QuickboxWindow(QMainWindow):
     def _show_panel(self, vm):
         self._clear_right()
         read_only = self._any_importing
+        locked    = read_only or vm["_running"]
         _focusable = []
 
         # Title
@@ -1389,6 +1407,10 @@ class QuickboxWindow(QMainWindow):
 
         if read_only and not (Path(self.vms_dir) / f".{vm['_name']}.copying").exists():
             notice = QLabel("⏳ <span style='color:#ff9800'>Import in progress — settings locked</span>")
+            notice.setTextFormat(Qt.TextFormat.RichText)
+            self._right_layout.addWidget(notice)
+        elif vm["_running"]:
+            notice = QLabel("<span style='color:#4caf50;font-size:11px'>● VM is running — stop the VM to change settings</span>")
             notice.setTextFormat(Qt.TextFormat.RichText)
             self._right_layout.addWidget(notice)
 
@@ -1471,7 +1493,7 @@ class QuickboxWindow(QMainWindow):
             pc.addItem(PROFILES[pid]["label"], pid)
         cur = vm.get("vm_profile", "standard")
         pc.setCurrentIndex(_profile_ids.index(cur) if cur in _profile_ids else 0)
-        pc.setEnabled(not read_only)
+        pc.setEnabled(not locked)
         profile_desc = QLabel()
         profile_desc.setStyleSheet("font-size:11px;")
         profile_desc.setWordWrap(True)
@@ -1488,7 +1510,7 @@ class QuickboxWindow(QMainWindow):
         cl.setAlignment(Qt.AlignmentFlag.AlignRight)
         cs = QCheckBox()
         cs.setChecked(vm.get("compat_mode") == "true")
-        cs.setEnabled(not read_only)
+        cs.setEnabled(not locked)
         cs.toggled.connect(lambda v, vm=vm: (
             setconf("compat_mode", "true" if v else "false", vm["_conf"]),
             vm.update({"compat_mode": "true" if v else "false"})))
@@ -1508,7 +1530,7 @@ class QuickboxWindow(QMainWindow):
         bc.addItem(S["boot_legacy"], "legacy")
         cur_boot = vm.get("boot", "uefi")
         bc.setCurrentIndex(0 if cur_boot == "uefi" else 1)
-        bc.setEnabled(not read_only)
+        bc.setEnabled(not locked)
         bc.currentIndexChanged.connect(lambda i, v=vm:
             (setconf("boot", bc.currentData(), v["_conf"]),
              v.update({"boot": bc.currentData()})))
@@ -1529,7 +1551,7 @@ class QuickboxWindow(QMainWindow):
             dc.model().item(2).setEnabled(False)
         cur_display = vm.get("display", "sdl")
         dc.setCurrentIndex(next((i for i in range(dc.count()) if dc.itemData(i) == cur_display), 0))
-        dc.setEnabled(not read_only)
+        dc.setEnabled(not locked)
         dc.currentIndexChanged.connect(lambda i, v=vm:
             (setconf("display", dc.currentData(), v["_conf"]),
              v.update({"display": dc.currentData()})))
@@ -1589,14 +1611,14 @@ class QuickboxWindow(QMainWindow):
 
                     del_btn = QPushButton(S["snap_delete"])
                     del_btn.setFixedWidth(70)
-                    del_btn.setEnabled(not read_only)
+                    del_btn.setEnabled(not locked)
                     del_btn.clicked.connect(lambda _, t=snap["tag"]: self._snap_delete(vm, t))
                     rl.addWidget(del_btn)
                     _focusable.append(del_btn)
 
                     apply_btn = QPushButton(S["snap_apply"])
                     apply_btn.setFixedWidth(70)
-                    apply_btn.setEnabled(not read_only)
+                    apply_btn.setEnabled(not locked)
                     apply_btn.clicked.connect(lambda _, t=snap["tag"]: self._snap_apply(vm, t))
                     rl.addWidget(apply_btn)
                     _focusable.append(apply_btn)
@@ -1611,8 +1633,11 @@ class QuickboxWindow(QMainWindow):
             self._snap_entry = QLineEdit()
             self._snap_entry.setPlaceholderText(S["snap_entry_ph"])
             self._snap_entry.setFixedWidth(180)
+            self._snap_entry.setEnabled(not locked)
+            if vm["_running"]:
+                self._snap_entry.setPlaceholderText(S["warn_snap_running_b"])
             create_btn = QPushButton(S["snap_create"])
-            create_btn.setEnabled(not read_only)
+            create_btn.setEnabled(not locked)
             create_btn.clicked.connect(lambda: self._snap_create(vm))
             cr.addWidget(self._snap_entry)
             cr.addWidget(create_btn)
@@ -1645,7 +1670,7 @@ class QuickboxWindow(QMainWindow):
         ql = QLabel(S["set_quiet"] + ":")
         qc = QCheckBox()
         qc.setChecked(vm.get("quiet_launch") == "true")
-        qc.setEnabled(not read_only)
+        qc.setEnabled(not locked)
         qc.toggled.connect(lambda v, vm=vm: (
             setconf("quiet_launch", "true" if v else "false", vm["_conf"]),
             vm.update({"quiet_launch": "true" if v else "false"})))
@@ -1661,16 +1686,16 @@ class QuickboxWindow(QMainWindow):
         br = QHBoxLayout(btn_row)
         br.setContentsMargins(0, 4, 0, 0)
         actions = [
-            ("act_edit_conf", "tt_edit_conf", lambda: subprocess.Popen(["xdg-open", vm["_conf"]])),
-            ("act_clone",     "tt_clone",     lambda: self._clone_vm(vm)),
-            ("act_open_dir",  "tt_open_dir",  lambda: subprocess.Popen(["xdg-open", str(Path(self.vms_dir) / vm["_name"])])),
+            ("act_edit_conf", "tt_edit_conf", lambda: subprocess.Popen(["xdg-open", vm["_conf"]]), locked),
+            ("act_clone",     "tt_clone",     lambda: self._clone_vm(vm), locked),
+            ("act_open_dir",  "tt_open_dir",  lambda: subprocess.Popen(["xdg-open", str(Path(self.vms_dir) / vm["_name"])]), read_only),
         ]
         if vm["_has_disk"]:
-            actions.append(("act_resize_disk", "tt_resize_disk", lambda: self._dlg_resize_disk(vm)))
-        for lbl_key, tt_key, cb in actions:
+            actions.append(("act_resize_disk", "tt_resize_disk", lambda: self._dlg_resize_disk(vm), locked))
+        for lbl_key, tt_key, cb, btn_locked in actions:
             btn = QPushButton(S[lbl_key])
             btn.setToolTip(S[tt_key])
-            btn.setEnabled(not read_only)
+            btn.setEnabled(not btn_locked)
             btn.clicked.connect(cb)
             br.addWidget(btn)
             _focusable.append(btn)
@@ -1703,7 +1728,7 @@ class QuickboxWindow(QMainWindow):
             rl.setSpacing(10)
             btn = QPushButton(S[lbl_key])
             btn.setFixedWidth(130)
-            btn.setEnabled(not read_only)
+            btn.setEnabled(not locked)
             btn.setStyleSheet("color:#c62828; font-weight:bold;")
             btn.clicked.connect(cb)
             note = QLabel(S[note_key])
@@ -1746,26 +1771,35 @@ class QuickboxWindow(QMainWindow):
 
         display = vm.get("display", "sdl")
         cmd = ["quickemu", "--vm", conf_path, "--display", display]
-        subprocess.Popen(cmd, cwd=self.vms_dir)
+        log = f"/tmp/qemu-{vmname}.log"
+        with open(log, "w") as logfile:
+            proc = subprocess.Popen(cmd, cwd=self.vms_dir, stdout=logfile, stderr=logfile)
+
+        def _check_launch():
+            if proc.poll() is not None and proc.returncode != 0:
+                body = S["warn_launch_fail_b"].format(proc.returncode)
+                try:
+                    tail = Path(log).read_text(errors="replace").strip().splitlines()[-6:]
+                    if tail:
+                        body += "\n\n" + "\n".join(tail)
+                except Exception:
+                    pass
+                self._warn(S["warn_launch_fail_t"], body)
+        QTimer.singleShot(1500, _check_launch)
         if not quiet:
             notify("quickbox", S["ntf_launching"].format(vmname), "low")
         setconf("snap_dirty", "true", conf_path)
         self._poll_vm_state(vmname, want_running=True)
 
     def _stop_vm(self, vm):
-        try:
-            subprocess.run(["pkill", "-TERM", "-f", f"name {vm['_name']},process={vm['_name']}"])
-        except Exception:
-            pass
+        if not self._confirm(S["dlg_stop_t"].format(vm["_pretty"]), S["dlg_stop_b"]):
+            return
+        self._kill_vm_process(vm["_name"])
         self._poll_vm_state(vm["_name"], want_running=False)
 
     def _poll_vm_state(self, vmname, want_running, _attempts=20):
         if is_running(vmname) == want_running:
             self._refresh()
-            if self.current_vm and self.current_vm["_name"] == vmname:
-                fresh = next((v for v in self.vms if v["_name"] == vmname), None)
-                if fresh:
-                    self._show_panel(fresh)
             return
         if _attempts > 0:
             QTimer.singleShot(500, lambda: self._poll_vm_state(vmname, want_running, _attempts - 1))
@@ -1776,7 +1810,7 @@ class QuickboxWindow(QMainWindow):
         if not tag:
             return
         if vm["_running"]:
-            self._warn(S["warn_snap_fail_t"], S["warn_snap_running_b"])
+            self._warn(S["vm_running"], S["warn_snap_running_b"])
             return
         snaps = get_snapshots(vm["_disk"])
         if any(s["tag"] == tag for s in snaps):
@@ -1864,8 +1898,6 @@ class QuickboxWindow(QMainWindow):
 
     def _refresh_and_show(self, vm):
         self._refresh()
-        fresh = next((v for v in self.vms if v["_name"] == vm["_name"]), vm)
-        self._show_panel(fresh)
 
     def _on_snap_done(self, ok, err, action, vm, tag):
         if ok:
@@ -1885,6 +1917,9 @@ class QuickboxWindow(QMainWindow):
 
     # ── clone ─────────────────────────────────────────────────────────────────────
     def _clone_vm(self, vm):
+        if vm["_running"]:
+            self._warn(S["vm_running"], S["warn_clone_running_b"])
+            return
         suggested = f"{vm['_name']}-{_date_tag()}"
         dlg = QDialog(self)
         dlg.setWindowTitle(S["clone_title"])
@@ -2009,14 +2044,15 @@ class QuickboxWindow(QMainWindow):
         worker.start()
 
     def _delete_disk(self, vm):
+        if not vm.get("disk_img"):
+            self._warn(S["warn_no_disk_t"], S["warn_no_disk_b"])
+            return
         if not self._confirm(S["dlg_del_disk_t"], S["dlg_del_disk_b"].format(vm["_pretty"])):
             return
-        try:
-            Path(vm["_disk"]).unlink()
-        except Exception:
-            pass
+        disk = Path(self.vms_dir) / vm["disk_img"]
+        if disk.exists():
+            disk.unlink()
         self._refresh()
-        self._show_panel(vm)
 
     def _delete_vm(self, vm):
         if not self._confirm(S["dlg_del_vm_t"].format(vm["_pretty"]), S["dlg_del_vm_b"]):
