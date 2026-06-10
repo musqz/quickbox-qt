@@ -2346,14 +2346,21 @@ class QuickboxWindow(QMainWindow):
         v.addWidget(title)
         v.addWidget(make_sep())
 
-        vl = QLabel(S["dl2_ver_lbl"])
+        vl = QLabel(f"<b>{S['dl2_ver_lbl']}</b>")
+        vl.setTextFormat(Qt.TextFormat.RichText)
         v.addWidget(vl)
         ver_combo = QComboBox()
         for name, _ in versions:
             ver_combo.addItem(name)
         default_idx = next((i for i, (n, _) in enumerate(versions) if n == distro_name), 0)
         ver_combo.setCurrentIndex(default_idx)
-        v.addWidget(ver_combo)
+        # a single-item dropdown misleads — show a plain label instead
+        if len(versions) > 1:
+            v.addWidget(ver_combo)
+        else:
+            ver_combo.hide()
+            single_lbl = QLabel(versions[0][0] if versions else "")
+            v.addWidget(single_lbl)
 
         cmd_lbl = QLabel(S["dl2_cmd_lbl"])
         v.addWidget(cmd_lbl)
