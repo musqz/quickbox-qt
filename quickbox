@@ -107,8 +107,6 @@ S = {
     "set_profile": "Profile:", "set_compat": "Compatibility mode:",
     "set_boot": "Boot mode:", "set_display": "Display:",
     "set_display_hint": "SDL: default.  GTK: resizable window.  SPICE: resizable + copy-paste + USB redirect (requires virt-viewer).",
-    "set_quiet": "Quiet launch:",
-    "set_quiet_note": "No launch notification",
     "set_compat_hint": "Use minimal QEMU without VirGL — for lightweight or older distros.",
     "boot_uefi": "UEFI", "boot_legacy": "Legacy (BIOS)",
     "snap_no_disk": "No disk yet — launch VM first to create one",
@@ -1683,27 +1681,6 @@ class QuickboxWindow(QMainWindow):
         av.setContentsMargins(0, 4, 0, 0)
         av.setSpacing(4)
 
-        tog_row = QWidget()
-        tg = QGridLayout(tog_row)
-        tg.setContentsMargins(0, 0, 0, 0)
-        tg.setColumnStretch(2, 1)
-        tg.setHorizontalSpacing(8)
-
-        ql = QLabel(S["set_quiet"] + ":")
-        qc = QCheckBox()
-        qc.setChecked(vm.get("quiet_launch") == "true")
-        qc.setEnabled(not locked)
-        qc.toggled.connect(lambda v, vm=vm: (
-            setconf("quiet_launch", "true" if v else "false", vm["_conf"]),
-            vm.update({"quiet_launch": "true" if v else "false"})))
-        qn = QLabel(S["set_quiet_note"])
-        qn.setStyleSheet("font-size:11px;")
-        tg.addWidget(ql, 0, 0)
-        tg.addWidget(qc, 0, 1)
-        tg.addWidget(qn, 0, 2)
-        _focusable.append(qc)
-        av.addWidget(tog_row)
-
         btn_row = QWidget()
         br = QHBoxLayout(btn_row)
         br.setContentsMargins(0, 4, 0, 0)
@@ -1789,7 +1766,6 @@ class QuickboxWindow(QMainWindow):
             subprocess.run(["qemu-img", "create", "-f", "qcow2", disk_path, disk_size])
 
         accel = "kvm" if KVM_AVAILABLE else "tcg"
-        quiet = vm.get("quiet_launch") == "true"
 
         display = vm.get("display", "sdl")
         cmd = ["quickemu", "--vm", conf_path, "--display", display]
@@ -1808,8 +1784,7 @@ class QuickboxWindow(QMainWindow):
                     pass
                 self._warn(S["warn_launch_fail_t"], body)
         QTimer.singleShot(1500, _check_launch)
-        if not quiet:
-            notify("quickbox", S["ntf_launching"].format(vmname), "low")
+        notify("quickbox", S["ntf_launching"].format(vmname), "low")
         setconf("snap_dirty", "true", conf_path)
         self._poll_vm_state(vmname, want_running=True)
 
