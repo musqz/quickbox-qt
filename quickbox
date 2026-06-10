@@ -1085,7 +1085,13 @@ class QuickboxWindow(QMainWindow):
 
         QShortcut(QKeySequence("Escape"), self).activated.connect(self._kb_escape)
 
-        self._list.itemActivated.connect(self._kb_list_enter)
+        # Enter via widget-local shortcuts, double-click via its own handler —
+        # itemActivated can fire on both and would double-launch
+        self._list.itemDoubleClicked.connect(self._on_list_double_click)
+        for _key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            _sc = QShortcut(QKeySequence(_key), self._list)
+            _sc.setContext(Qt.ShortcutContext.WidgetShortcut)
+            _sc.activated.connect(lambda: self._kb_list_enter(self._list.currentItem()))
 
         self._show_welcome()
 
@@ -1378,8 +1384,14 @@ class QuickboxWindow(QMainWindow):
             return
         if vm["_running"]:
             self._stop_vm(vm)
-        else:
+        elif not (vm.get("_copying") or self._any_importing):
             self._launch_vm(vm)
+
+    def _on_list_double_click(self, item):
+        vm = item.data(Qt.ItemDataRole.UserRole) if item else None
+        if not vm or vm.get("_running") or vm.get("_copying") or self._any_importing:
+            return
+        self._launch_vm(vm)
 
     def _track_worker(self, worker):
         self._active_workers.add(worker)
