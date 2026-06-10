@@ -1,0 +1,91 @@
+name: Release Debian Package
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Check PySide6 availability
+        run: |
+          apt-cache show python3-pyside6 > /dev/null 2>&1 && \
+            echo "PYSIDE6_PKG=python3-pyside6" >> "$GITHUB_ENV" || \
+            echo "PYSIDE6_PKG=python3-pip" >> "$GITHUB_ENV"
+
+      - name: Build .deb package
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          PKG="quickbox-qt_${VERSION}_all"
+          mkdir -p "${PKG}/DEBIAN"
+          mkdir -p "${PKG}/usr/bin"
+          mkdir -p "${PKG}/usr/share/applications"
+          mkdir -p "${PKG}/usr/share/quickbox-qt/translations"
+          mkdir -p "${PKG}/usr/share/icons/hicolor/scalable/apps"
+          mkdir -p "${PKG}/usr/share/licenses/quickbox-qt"
+
+          # Binary
+          cp quickbox "${PKG}/usr/bin/quickbox"
+          chmod 0755 "${PKG}/usr/bin/quickbox"
+
+          # Version file (read by the app at runtime)
+          cp version.txt "${PKG}/usr/share/quickbox-qt/version.txt"
+
+          # Translations
+          cp translations/*.json "${PKG}/usr/share/quickbox-qt/translations/"
+
+          # Desktop entry
+          cp pkg/quickbox.desktop "${PKG}/usr/share/applications/quickbox.desktop"
+
+          # Icon
+          cp icons/hicolor/scalable/apps/quickbox.svg \
+            "${PKG}/usr/share/icons/hicolor/scalable/apps/quickbox.svg"
+
+          # License
+          cp LICENSE "${PKG}/usr/share/licenses/quickbox-qt/LICENSE"
+
+          # DEBIAN/control
+          cat > "${PKG}/DEBIAN/control" <<EOF
+          Package: quickbox-qt
+          Version: ${VERSION}
+          Architecture: all
+          Maintainer: musqz
+          Depends: python3, ${PYSIDE6_PKG}, xdg-utils, qemu-utils
+          Recommends: quickemu, ovmf, virt-viewer
+          Conflicts: quickbox
+          Provides: quickbox
+          Section: misc
+          Priority: optional
+          Homepage: https://github.com/musqz/quickbox-qt
+          Description: Qt6/PySide6 GUI for managing QEMU virtual machines
+           A Qt6 frontend for quickemu. Supports VM creation, start/stop,
+           snapshots, cloning, SSH port management, UEFI/BIOS boot, disk
+           resize/format, and distro downloads via quickget.
+          EOF
+
+          sed -i 's/^          //' "${PKG}/DEBIAN/control"
+
+          dpkg-deb --build --root-owner-group "${PKG}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: quickbox-qt_${{ steps.version.outputs.VERSION }}_all.deb
+          generate_release_notes: true
