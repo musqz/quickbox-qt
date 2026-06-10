@@ -672,6 +672,9 @@ class DownloadWorker(QThread):
         total_mb    = None
         got_progress = False
         rc = 1
+        _spd_pct = 0.0
+        _spd_t   = t0
+        _spd_mbs = 0.0
 
         def _fmt_size(mb):
             return f"{mb / 1024:.1f} GB" if mb >= 1024 else f"{mb:.0f} MB"
@@ -738,9 +741,16 @@ class DownloadWorker(QThread):
                     if m:
                         pct = float(m.group(1))
                         got_progress = True
-                        size_str = f" of {_fmt_size(total_mb)}" if total_mb else ""
+                        now = time.monotonic()
+                        dt = now - _spd_t
+                        if dt >= 1.0 and total_mb and pct > _spd_pct:
+                            _spd_mbs = (total_mb * (pct - _spd_pct) / 100) / dt
+                            _spd_pct = pct
+                            _spd_t   = now
+                        size_str  = f" of {_fmt_size(total_mb)}" if total_mb else ""
+                        speed_str = f"  —  {_spd_mbs:.1f} MB/s" if _spd_mbs > 0 else ""
                         self.progress.emit(
-                            f"Downloading… {pct:.1f}%{size_str}",
+                            f"Downloading… {pct:.1f}%{size_str}{speed_str}",
                             min(pct / 100.0, 0.99))
                     elif not got_progress:
                         self.progress.emit(segment[:80], -1.0)
