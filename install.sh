@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Quickbox-Qt Installation Script
 # MIT License - Copyright (c) 2026 Musqz
