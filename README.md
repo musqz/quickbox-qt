@@ -47,6 +47,10 @@ Ported from the original [quickbox](https://github.com/musqz/quickbox) GTK versi
 yay -S quickbox-qt
 ```
 
+### Debian
+
+[Quickbox-qt debian](https://github.com/musqz/quickbox-qt/releases/tag/v1.3.2)
+
 ### Manual
 
 ```sh
