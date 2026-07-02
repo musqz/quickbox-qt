@@ -52,7 +52,7 @@ jobs:
           cp translations/*.json "${PKG}/usr/share/quickbox-qt/translations/"
 
           # Desktop entry
-          cp pkg/quickbox.desktop "${PKG}/usr/share/applications/quickbox.desktop"
+          cp packaging/quickbox.desktop "${PKG}/usr/share/applications/quickbox.desktop"
 
           # Icon
           cp icons/hicolor/scalable/apps/quickbox.svg \
