@@ -41,14 +41,11 @@ Ported from the original [quickbox](https://github.com/musqz/quickbox) GTK versi
 
 ## Installation
 
-### Arch Linux — local PKGBUILD (beta testing)
+### Arch Linux
 
 ```sh
-cd pkg
-makepkg -si
+yay -S quickbox-qt
 ```
-
-> AUR package is planned but not yet published.
 
 ### Manual
 
