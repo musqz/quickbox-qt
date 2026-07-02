@@ -55,6 +55,8 @@ makepkg -si
 ```sh
 # Install dependencies
 pip install PySide6
+or
+yay -S pyside6
 
 # Run directly
 ./quickbox
