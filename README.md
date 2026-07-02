@@ -12,8 +12,6 @@
   <img src="https://img.shields.io/badge/platform-Linux-lightgrey?logo=linux&logoColor=white" alt="Linux"/>
 </p>
 
-> **Beta** — actively developed and tested. Not yet published to AUR or any distro repository. Feedback welcome.
-
 A Qt6/PySide6 GUI front-end for [quickemu](https://github.com/quickemu-project/quickemu).
 
 Ported from the original [quickbox](https://github.com/musqz/quickbox) GTK version.
