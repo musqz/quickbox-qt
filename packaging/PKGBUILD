@@ -1,6 +1,6 @@
 # Maintainer: musqz
 pkgname=quickbox-qt
-pkgver=1.3.0
+pkgver=1.3.1
 pkgrel=1
 pkgdesc="Qt6/PySide6 GUI front-end for quickemu"
 arch=('any')
@@ -19,7 +19,7 @@ optdepends=(
 conflicts=('quickbox')
 provides=('quickbox')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-sha256sums=('81e037fdc7f863408c7588f364e40dd7c184e04127633f7681f342ba99621a0e')
+sha256sums=('SKIP')
 
 package() {
     cd "$srcdir/$pkgname-$pkgver"
@@ -31,7 +31,7 @@ package() {
         install -Dm644 "$f" "$pkgdir/usr/share/$pkgname/$f"
     done
 
-    install -Dm644 pkg/quickbox.desktop \
+    install -Dm644 packaging/quickbox.desktop \
         "$pkgdir/usr/share/applications/quickbox.desktop"
 
     # Icon
@@ -40,16 +40,4 @@ package() {
 
     # Version
     install -Dm644 version.txt "$pkgdir/usr/share/quickbox-qt/version.txt"
-}
-
-post_install() {
-    gtk-update-icon-cache -q -t -f usr/share/icons/hicolor
-}
-
-post_upgrade() {
-    post_install
-}
-
-post_remove() {
-    gtk-update-icon-cache -q -t -f usr/share/icons/hicolor
 }
