@@ -80,3 +80,7 @@ matching the keys in any existing translation to add a new language.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+---
+
+> Parts of this tool were built with AI assistance (Claude by Anthropic). All code has been reviewed and tested by the author.
