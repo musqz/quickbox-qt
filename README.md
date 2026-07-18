@@ -16,10 +16,36 @@ A Qt6/PySide6 GUI front-end for [quickemu](https://github.com/quickemu-project/q
 
 Ported from the original [quickbox](https://github.com/musqz/quickbox) GTK version.
 
-![quickbox-qt](docs/screenshots/main.png?v=2)
-![VM settings](docs/screenshots/settings.png?v=2)
-![Download window](docs/screenshots/download.png?v=2)
-![Snapshot manager](docs/screenshots/advanced.png?v=2)
+<table align="center">
+  <tr>
+    <td align="center">
+      <a href="docs/screenshots/main.png"><img src="docs/screenshots/main.png" height="190" alt="Main window"/></a><br/>
+      <sub>Main window</sub>
+    </td>
+    <td align="center">
+      <a href="docs/screenshots/settings.png"><img src="docs/screenshots/settings.png" height="190" alt="VM settings"/></a><br/>
+      <sub>VM settings</sub>
+    </td>
+    <td align="center">
+      <a href="docs/screenshots/download.png"><img src="docs/screenshots/download.png" height="190" alt="Download distros"/></a><br/>
+      <sub>Download distros</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <a href="docs/screenshots/advanced.png"><img src="docs/screenshots/advanced.png" height="190" alt="Locations & profiles"/></a><br/>
+      <sub>Locations &amp; profiles</sub>
+    </td>
+    <td align="center">
+      <a href="docs/screenshots/migrate.png"><img src="docs/screenshots/migrate.png" height="190" alt="Migrate VMs"/></a><br/>
+      <sub>Migrate VMs</sub>
+    </td>
+    <td align="center">
+      <a href="docs/screenshots/about.png"><img src="docs/screenshots/about.png" height="190" alt="About"/></a><br/>
+      <sub>About</sub>
+    </td>
+  </tr>
+</table>
 
 ## Features
 
