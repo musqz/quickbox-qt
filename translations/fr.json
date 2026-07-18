@@ -1,5 +1,6 @@
 {
   "app_title": "Quickbox",
+  "about_quickemu": "Propulsé par",
   "tt_download": "Télécharger un ISO de distro via quickget",
   "tt_custom_vm": "Créer une VM depuis un fichier ISO ou IMG local",
   "tt_advanced": "Migrer des VMs, changer d'emplacement, gérer les chemins",

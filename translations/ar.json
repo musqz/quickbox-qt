@@ -1,5 +1,6 @@
 {
   "app_title": "Quickbox",
+  "about_quickemu": "مدعوم بواسطة",
   "tt_download": "تنزيل ISO جديد للتوزيعة عبر quickget",
   "tt_custom_vm": "إنشاء جهاز افتراضي من ملف ISO أو IMG محلي",
   "tt_advanced": "نقل الأجهزة الافتراضية، تغيير الموقع، إدارة المسارات المحفوظة",

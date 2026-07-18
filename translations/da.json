@@ -1,5 +1,6 @@
 {
   "app_title": "Quickbox",
+  "about_quickemu": "Drevet af",
   "tt_download": "Download en ny distro-ISO via quickget",
   "tt_custom_vm": "Opret en VM fra en lokal ISO- eller IMG-fil",
   "tt_advanced": "Migrer VM'er, skift placering, administrer gemte stier",

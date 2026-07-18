@@ -1,5 +1,6 @@
 {
   "app_title": "Quickbox",
+  "about_quickemu": "基于",
   "tt_download": "通过 quickget 下载新发行版 ISO",
   "tt_custom_vm": "从本地 ISO 或 IMG 文件创建虚拟机",
   "tt_advanced": "迁移虚拟机、切换位置、管理已保存路径",

@@ -79,6 +79,7 @@ _lang = (_locale.getlocale()[0] or "en")[:2]
 
 S = {
     "app_title": "Quickbox",
+    "about_quickemu": "Powered by",
     "tt_download": "Download a new distro ISO via quickget",
     "tt_custom_vm": "Create a VM from a local ISO or IMG file",
     "tt_advanced": "Migrate VMs, switch location, manage saved paths",
@@ -2846,6 +2847,13 @@ class QuickboxWindow(QMainWindow):
         self._warn(S["warn_mig_fail_t"], S["warn_mig_fail_b"])
 
     def _dlg_about(self):
+        def _link_label(html_text):
+            lbl = QLabel(html_text)
+            lbl.setTextFormat(Qt.TextFormat.RichText)
+            lbl.setOpenExternalLinks(True)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            return lbl
+
         dlg = QDialog(self)
         dlg.setWindowTitle("Quickbox")
         dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
@@ -2858,17 +2866,20 @@ class QuickboxWindow(QMainWindow):
         name.setAlignment(Qt.AlignmentFlag.AlignCenter)
         v.addWidget(name)
 
-        ver = QLabel(f"v{VERSION}")
+        ver = QLabel(VERSION)
         ver.setAlignment(Qt.AlignmentFlag.AlignCenter)
         v.addWidget(ver)
 
+        v.addWidget(_link_label(
+            f"{html.escape(S['about_quickemu'])} "
+            f"<a href='https://github.com/quickemu-project/quickemu'>quickemu</a>"
+        ))
+
         v.addWidget(make_sep())
 
-        link = QLabel("<a href='https://github.com/musqz/quickbox-qt'>github.com/musqz/quickbox-qt</a>")
-        link.setTextFormat(Qt.TextFormat.RichText)
-        link.setOpenExternalLinks(True)
-        link.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        v.addWidget(link)
+        v.addWidget(_link_label(
+            "<a href='https://github.com/musqz/quickbox-qt'>github.com/musqz/quickbox-qt</a>"
+        ))
 
         author = QLabel("musqz · MIT")
         author.setAlignment(Qt.AlignmentFlag.AlignCenter)
