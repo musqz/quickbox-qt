@@ -1,5 +1,6 @@
 {
   "app_title": "Quickbox",
+  "about_quickemu": "Realizat cu",
   "tt_download": "Descarcă un ISO de distro nou prin quickget",
   "tt_custom_vm": "Creează o VM dintr-un fișier ISO sau IMG local",
   "tt_advanced": "Migrează VM-uri, schimbă locația, gestionează căile salvate",

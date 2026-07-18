@@ -1,5 +1,6 @@
 {
   "app_title": "Quickbox",
+  "about_quickemu": "Destekleyen",
   "tt_download": "quickget aracılığıyla yeni bir distro ISO'su indir",
   "tt_custom_vm": "Yerel ISO veya IMG dosyasından VM oluştur",
   "tt_advanced": "VM'leri taşı, konum değiştir, kayıtlı yolları yönet",

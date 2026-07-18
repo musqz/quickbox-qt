@@ -1,5 +1,6 @@
 {
   "app_title": "Quickbox",
+  "about_quickemu": "Работает на",
   "tt_download": "Скачать новый ISO дистрибутива через quickget",
   "tt_custom_vm": "Создать ВМ из локального файла ISO или IMG",
   "tt_advanced": "Перенос ВМ, смена расположения, управление сохранёнными путями",

@@ -1,5 +1,6 @@
 {
   "app_title": "Quickbox",
+  "about_quickemu": "Unterstützt von",
   "tt_download": "Neue Distro-ISO via quickget herunterladen",
   "tt_custom_vm": "VM aus lokaler ISO- oder IMG-Datei erstellen",
   "tt_advanced": "VMs migrieren, Speicherort wechseln, gespeicherte Pfade verwalten",

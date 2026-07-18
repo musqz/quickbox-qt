@@ -1,5 +1,6 @@
 {
   "app_title": "Quickbox",
+  "about_quickemu": "提供",
   "tt_download": "quickgetで新しいディストリビューションISOをダウンロード",
   "tt_custom_vm": "ローカルのISOまたはIMGファイルからVMを作成",
   "tt_advanced": "VMの移行、場所の変更、保存済みパスの管理",

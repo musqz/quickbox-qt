@@ -1,5 +1,6 @@
 {
   "app_title": "Quickbox",
+  "about_quickemu": "מופעל על ידי",
   "tt_download": "הורדת ISO חדש לתפוצה דרך quickget",
   "tt_custom_vm": "יצירת מכונה מקובץ ISO או IMG מקומי",
   "tt_advanced": "העברת מכונות, שינוי מיקום, ניהול נתיבים שמורים",

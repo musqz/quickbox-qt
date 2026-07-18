@@ -1,5 +1,6 @@
 {
   "app_title": "Quickbox",
+  "about_quickemu": "Βασισμένο σε",
   "tt_download": "Λήψη νέου ISO διανομής μέσω quickget",
   "tt_custom_vm": "Δημιουργία VM από τοπικό αρχείο ISO ή IMG",
   "tt_advanced": "Μετεγκατάσταση VM, αλλαγή τοποθεσίας, διαχείριση αποθηκευμένων διαδρομών",

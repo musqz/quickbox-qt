@@ -79,6 +79,7 @@ _lang = (_locale.getlocale()[0] or "en")[:2]
 
 S = {
     "app_title": "Quickbox",
+    "about_quickemu": "Powered by",
     "tt_download": "Download a new distro ISO via quickget",
     "tt_custom_vm": "Create a VM from a local ISO or IMG file",
     "tt_advanced": "Migrate VMs, switch location, manage saved paths",
@@ -2861,6 +2862,15 @@ class QuickboxWindow(QMainWindow):
         ver = QLabel(f"v{VERSION}")
         ver.setAlignment(Qt.AlignmentFlag.AlignCenter)
         v.addWidget(ver)
+
+        credit = QLabel(
+            f"{html.escape(S['about_quickemu'])} "
+            f"<a href='https://github.com/quickemu-project/quickemu'>quickemu</a>"
+        )
+        credit.setTextFormat(Qt.TextFormat.RichText)
+        credit.setOpenExternalLinks(True)
+        credit.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        v.addWidget(credit)
 
         v.addWidget(make_sep())
 

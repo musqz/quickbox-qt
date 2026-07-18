@@ -77,6 +77,10 @@ extended via the Advanced panel inside the app.
 JSON files live in `translations/`. Add a new file named `<lang_code>.json`
 matching the keys in any existing translation to add a new language.
 
+## Credits
+
+Quickbox-qt is just a GUI — all the actual VM work (downloading, booting, disk handling) is done by [quickemu](https://github.com/quickemu-project/quickemu). Quickbox-qt wouldn't exist without it.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
