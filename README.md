@@ -95,7 +95,7 @@ yay -S pyside6
 quickbox
 ```
 
-VMs are read from `~/quickemu` by default. The location can be changed or
+VMs are read from `~/emu` by default. The location can be changed or
 extended via the Advanced panel inside the app.
 
 ## Translations
