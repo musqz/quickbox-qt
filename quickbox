@@ -2847,6 +2847,13 @@ class QuickboxWindow(QMainWindow):
         self._warn(S["warn_mig_fail_t"], S["warn_mig_fail_b"])
 
     def _dlg_about(self):
+        def _link_label(html_text):
+            lbl = QLabel(html_text)
+            lbl.setTextFormat(Qt.TextFormat.RichText)
+            lbl.setOpenExternalLinks(True)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            return lbl
+
         dlg = QDialog(self)
         dlg.setWindowTitle("Quickbox")
         dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
@@ -2859,26 +2866,20 @@ class QuickboxWindow(QMainWindow):
         name.setAlignment(Qt.AlignmentFlag.AlignCenter)
         v.addWidget(name)
 
-        ver = QLabel(f"v{VERSION}")
+        ver = QLabel(VERSION)
         ver.setAlignment(Qt.AlignmentFlag.AlignCenter)
         v.addWidget(ver)
 
-        credit = QLabel(
+        v.addWidget(_link_label(
             f"{html.escape(S['about_quickemu'])} "
             f"<a href='https://github.com/quickemu-project/quickemu'>quickemu</a>"
-        )
-        credit.setTextFormat(Qt.TextFormat.RichText)
-        credit.setOpenExternalLinks(True)
-        credit.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        v.addWidget(credit)
+        ))
 
         v.addWidget(make_sep())
 
-        link = QLabel("<a href='https://github.com/musqz/quickbox-qt'>github.com/musqz/quickbox-qt</a>")
-        link.setTextFormat(Qt.TextFormat.RichText)
-        link.setOpenExternalLinks(True)
-        link.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        v.addWidget(link)
+        v.addWidget(_link_label(
+            "<a href='https://github.com/musqz/quickbox-qt'>github.com/musqz/quickbox-qt</a>"
+        ))
 
         author = QLabel("musqz · MIT")
         author.setAlignment(Qt.AlignmentFlag.AlignCenter)
