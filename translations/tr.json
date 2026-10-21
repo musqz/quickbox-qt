@@ -124,7 +124,7 @@
   "dlg_snap_del_t": "'{}' anlık görüntüsü silinsin mi?",
   "dlg_snap_del_b": "Bu geri alınamaz.",
   "dlg_fmt_t": "Disk biçimlendirilsin mi?",
-  "dlg_fmt_b": "Bu, {} düzeniyle yeni bir {}GB disk oluşturacak: {}\n\nDiskteki tüm mevcut veriler kaybolacak.",
+  "dlg_fmt_b": "Bu, {1} düzeniyle yeni bir {0}GB disk oluşturacak.\n\nDiskteki tüm mevcut veriler kaybolacak.",
   "dlg_migrate_t": "Taşıma başlatılsın mı?",
   "dlg_migrate_b": "{} VM'yi şuraya kopyala:\n{}\n\n  • {}\n\nKaldırmayı onaylamazsanız orijinaller kalır.",
   "warn_exists_t": "Zaten mevcut",

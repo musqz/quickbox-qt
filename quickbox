@@ -238,7 +238,8 @@ S = {
 def _load_i18n():
     for d in [Path(__file__).parent / "translations",
               Path.home() / ".local/share/quickbox/translations",
-              Path("/usr/share/quickbox/translations")]:
+              Path("/usr/share/quickbox/translations"),
+              Path("/usr/share/quickbox-qt/translations")]:
         for code in (_lang, "en"):
             p = d / f"{code}.json"
             if p.exists():

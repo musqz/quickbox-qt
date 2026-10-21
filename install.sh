@@ -25,7 +25,7 @@ echo -e "${GREEN}✓ quickbox installed${NC}"
 
 # Install desktop file
 echo "Installing desktop file..."
-cp pkg/quickbox.desktop /usr/share/applications/
+cp packaging/quickbox.desktop /usr/share/applications/
 echo -e "${GREEN}✓ quickbox.desktop installed${NC}"
 
 # Install translations
