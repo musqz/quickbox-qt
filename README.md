@@ -40,10 +40,6 @@ Ported from the original [quickbox](https://codeberg.org/linux-bird/quickbox) GT
       <a href="docs/screenshots/migrate.png"><img src="docs/screenshots/thumbs/migrate.png" width="250" height="300" alt="Migrate VMs"/></a><br/>
       <sub>Migrate VMs</sub>
     </td>
-    <td align="center">
-      <a href="docs/screenshots/about.png"><img src="docs/screenshots/thumbs/about.png" width="250" height="300" alt="About"/></a><br/>
-      <sub>About</sub>
-    </td>
   </tr>
 </table>
 
