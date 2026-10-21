@@ -18,6 +18,6 @@ pkgbase = quickbox-qt
 	provides = quickbox
 	conflicts = quickbox
 	source = quickbox-qt-1.3.4.tar.gz::https://codeberg.org/linux-bird/quickbox-qt/archive/refs/tags/v1.3.4.tar.gz
-	sha256sums = SKIP
+	sha256sums = cff480b773be84e89dbc76a4316283d4e4c6cac82453281225201b2a2abcf128
 
 pkgname = quickbox-qt
