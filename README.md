@@ -1,6 +1,3 @@
-> **This repository has moved to Codeberg: https://codeberg.org/linux-bird/quickbox-qt**
-> It is archived here. Please use Codeberg for issues and pull requests.
-
 # quickbox-qt --- GUI for quickemu
 
 <p align="center">
@@ -8,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/musqz/quickbox-qt/releases"><img src="https://img.shields.io/github/v/release/musqz/quickbox-qt" alt="Version"/></a>
+  <a href="https://codeberg.org/linux-bird/quickbox-qt/releases"><img src="https://img.shields.io/gitea/v/release/linux-bird/quickbox-qt?gitea_url=https://codeberg.org" alt="Version"/></a>
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License"/>
   <img src="https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/Qt-PySide6-41CD52?logo=qt&logoColor=white" alt="PySide6"/>
@@ -17,7 +14,7 @@
 
 A Qt6/PySide6 GUI front-end for [quickemu](https://github.com/quickemu-project/quickemu).
 
-Ported from the original [quickbox](https://github.com/musqz/quickbox) GTK version.
+Ported from the original [quickbox](https://codeberg.org/linux-bird/quickbox) GTK version.
 
 <table align="center">
   <tr>
@@ -42,10 +39,6 @@ Ported from the original [quickbox](https://github.com/musqz/quickbox) GTK versi
     <td align="center">
       <a href="docs/screenshots/migrate.png"><img src="docs/screenshots/thumbs/migrate.png" width="250" height="300" alt="Migrate VMs"/></a><br/>
       <sub>Migrate VMs</sub>
-    </td>
-    <td align="center">
-      <a href="docs/screenshots/about.png"><img src="docs/screenshots/thumbs/about.png" width="250" height="300" alt="About"/></a><br/>
-      <sub>About</sub>
     </td>
   </tr>
 </table>
@@ -75,10 +68,6 @@ Ported from the original [quickbox](https://github.com/musqz/quickbox) GTK versi
 ```sh
 yay -S quickbox-qt
 ```
-
-### Debian
-
-[Quickbox-qt debian](https://github.com/musqz/quickbox-qt/releases/tag/v1.3.2)
 
 ### Manual
 
