@@ -2879,7 +2879,7 @@ class QuickboxWindow(QMainWindow):
         v.addWidget(make_sep())
 
         v.addWidget(_link_label(
-            "<a href='https://codeberg.org/linux-bird/quickbox-qt'>codeberg.org/linux-bird/quickbox-qt</a>"
+            "<a href='https://github.com/musqz/quickbox-qt'>github.com/musqz/quickbox-qt</a>"
         ))
 
         author = QLabel("musqz · MIT")
