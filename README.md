@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://codeberg.org/linux-bird/quickbox-qt/releases"><img src="https://img.shields.io/gitea/v/release/linux-bird/quickbox-qt?gitea_url=https://codeberg.org" alt="Version"/></a>
+  <a href="https://github.com/musqz/quickbox-qt/releases"><img src="https://img.shields.io/github/v/release/musqz/quickbox-qt" alt="Version"/></a>
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License"/>
   <img src="https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/Qt-PySide6-41CD52?logo=qt&logoColor=white" alt="PySide6"/>
@@ -14,7 +14,7 @@
 
 A Qt6/PySide6 GUI front-end for [quickemu](https://github.com/quickemu-project/quickemu).
 
-Ported from the original [quickbox](https://codeberg.org/linux-bird/quickbox) GTK version.
+Ported from the original [quickbox](https://github.com/musqz/quickbox) GTK version.
 
 <table align="center">
   <tr>
@@ -68,6 +68,10 @@ Ported from the original [quickbox](https://codeberg.org/linux-bird/quickbox) GT
 ```sh
 yay -S quickbox-qt
 ```
+
+### Debian
+
+[Quickbox-qt debian](https://github.com/musqz/quickbox-qt/releases/tag/v1.3.2)
 
 ### Manual
 
