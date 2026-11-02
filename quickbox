@@ -1280,9 +1280,6 @@ class QuickboxWindow(QMainWindow):
                 self._tray_menu.addAction(self._tray_vm_row(vm))
             self._tray_menu.addSeparator()
         self._tray_menu.addAction(self._tray_section(S["tray_sec_app"]))
-        show_act = QAction(S["tray_show"], self)
-        show_act.triggered.connect(lambda: QTimer.singleShot(0, self._raise_window))
-        self._tray_menu.addAction(show_act)
         notif_act = QAction(S["tray_notifications"], self)
         notif_act.setCheckable(True)
         notif_act.setChecked(_notifications_on)
@@ -1326,10 +1323,13 @@ class QuickboxWindow(QMainWindow):
         self.activateWindow()
 
     def _on_tray_activated(self, reason):
-        if reason not in (QSystemTrayIcon.ActivationReason.Trigger,
-                          QSystemTrayIcon.ActivationReason.DoubleClick):
+        # DoubleClick is ignored: it follows a Trigger and would toggle twice
+        if reason != QSystemTrayIcon.ActivationReason.Trigger:
             return
-        self._raise_window()
+        if self.isVisible() and not self.isMinimized():
+            self.hide()
+        else:
+            self._raise_window()
 
     def _on_tray_toggle(self, checked):
         setconf("systray", "true" if checked else "false")
