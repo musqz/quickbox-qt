@@ -1216,11 +1216,12 @@ class QuickboxWindow(QMainWindow):
             msg = conn.recv(64).decode().strip()
             conn.close()
             if "activate" in msg:
-                self.show()
-                self.raise_()
-                self.activateWindow()
-        except Exception:
-            pass
+                # Wayland ignores raise/activate without a token; re-mapping puts the window on top
+                if self.isVisible() and not self.isMinimized():
+                    self.hide()
+                self._raise_window()
+        except Exception as e:
+            print(f"quickbox: ipc error: {e}", file=sys.stderr)
 
     # ── systray ───────────────────────────────────────────────────────────────────
     def _build_tray(self):
