@@ -85,7 +85,7 @@ S = {
     "tt_advanced": "Migrate VMs, switch location, manage saved paths",
     "tt_tray": "Enable system tray icon",
     "tray_sec_running": "RUNNING", "tray_sec_app": "QUICKBOX",
-    "tray_show": "Show Quickbox", "tray_notifications": "Notifications",
+    "tray_notifications": "Notifications",
     "tray_quit": "Quit Quickbox", "tray_stop": "Stop",
     "dlg_stop_t": "Stop '{}'?",
     "dlg_stop_b": "The VM will be sent a shutdown signal.",
@@ -1345,6 +1345,7 @@ class QuickboxWindow(QMainWindow):
         setconf("win_w", str(self.width()))
         setconf("win_h", str(self.height()))
         event.accept()
+        QApplication.quit()
 
     def focusNextPrevChild(self, next_child):
         focused = self.focusWidget()
@@ -2936,6 +2937,8 @@ class QuickboxApp(QApplication):
         self.setApplicationName("Quickbox")
         self.setApplicationVersion(VERSION)
         self.setDesktopFileName("quickbox")
+        # tray toggle hides the window; closeEvent quits explicitly
+        self.setQuitOnLastWindowClosed(False)
         self.setStyleSheet(APP_STYLE)
         self._register_icons()
 
