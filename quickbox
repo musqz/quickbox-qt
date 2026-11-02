@@ -1216,11 +1216,13 @@ class QuickboxWindow(QMainWindow):
             msg = conn.recv(64).decode().strip()
             conn.close()
             if "activate" in msg:
-                self.show()
-                self.raise_()
-                self.activateWindow()
-        except Exception:
-            pass
+                # Wayland ignores raise/activate without a token; re-mapping puts the window on top
+                if (self.isVisible() and not self.isMinimized()
+                        and QApplication.activeModalWidget() is None):
+                    self.hide()
+                self._raise_window()
+        except Exception as e:
+            print(f"quickbox: ipc error: {e}", file=sys.stderr)
 
     # ── systray ───────────────────────────────────────────────────────────────────
     def _build_tray(self):
@@ -1326,7 +1328,8 @@ class QuickboxWindow(QMainWindow):
         # DoubleClick is ignored: it follows a Trigger and would toggle twice
         if reason != QSystemTrayIcon.ActivationReason.Trigger:
             return
-        if self.isVisible() and not self.isMinimized():
+        if (self.isVisible() and not self.isMinimized()
+                and QApplication.activeModalWidget() is None):
             self.hide()
         else:
             self._raise_window()
