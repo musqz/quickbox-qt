@@ -94,6 +94,14 @@ quickbox
 VMs are read from `~/emu` by default. The location can be changed or
 extended via the Advanced panel inside the app.
 
+Boot an ISO in place (not copied, changes discarded on exit):
+
+```sh
+quickbox --iso /path/to/file.iso
+```
+
+A running Quickbox window handles the request. `quickbox --help` and `quickbox --version` print and exit.
+
 ## Translations
 
 JSON files live in `translations/`. Add a new file named `<lang_code>.json`

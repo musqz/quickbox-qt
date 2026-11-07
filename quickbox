@@ -21,12 +21,44 @@ def _resolve_quickget():
 # ── single-instance lock ───────────────────────────────────────────────────────
 SOCKET_PATH = Path.home() / ".config/quickbox/quickbox-qt.sock"
 
+def _parse_args():
+    """Handle --help/--version/--iso before any GUI or lock work; returns the ISO path or None."""
+    args = sys.argv[1:]
+    if not args:
+        return None
+    if args[0] in ("-h", "--help"):
+        print("usage: quickbox [--iso PATH] [--version]\n\n"
+              "  --iso PATH   boot an ISO in a VM, in place, changes discarded\n"
+              "  --version    print the version")
+        sys.exit(0)
+    if args[0] in ("-V", "--version"):
+        for p in [Path(__file__).resolve().parent / "version.txt",
+                  Path("/usr/share/quickbox-qt/version.txt")]:
+            if p.is_file():
+                print("quickbox", p.read_text().strip())
+                sys.exit(0)
+        print("quickbox unknown")
+        sys.exit(0)
+    if args[0] == "--iso" and len(args) == 2:
+        iso = Path(args[1]).expanduser().resolve()
+        if iso.suffix.lower() not in (".iso", ".img") or not iso.is_file():
+            print(f"quickbox: not an .iso/.img file: {args[1]}", file=sys.stderr)
+            sys.exit(2)
+        if any(c in str(iso) for c in '"$`\\\n'):
+            print("quickbox: path contains a quote, $, backtick, backslash or newline", file=sys.stderr)
+            sys.exit(2)
+        return str(iso)
+    print("quickbox: unknown arguments, see --help", file=sys.stderr)
+    sys.exit(2)
+
+_iso_request = _parse_args()
+
 def _acquire_lock():
     SOCKET_PATH.parent.mkdir(parents=True, exist_ok=True)
     try:
         c = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         c.connect(str(SOCKET_PATH))
-        c.sendall(b"activate\n")
+        c.sendall(f"iso {_iso_request}\n".encode() if _iso_request else b"activate\n")
         c.close()
         sys.exit(0)
     except (ConnectionRefusedError, FileNotFoundError):
@@ -1213,9 +1245,11 @@ class QuickboxWindow(QMainWindow):
     def _on_ipc(self, fd):
         try:
             conn, _ = _lock_socket.accept()
-            msg = conn.recv(64).decode().strip()
+            msg = conn.recv(4096).decode().strip()
             conn.close()
-            if "activate" in msg:
+            if msg.startswith("iso "):
+                self._launch_iso(msg[4:].strip())
+            elif "activate" in msg:
                 # Wayland ignores raise/activate without a token; re-mapping puts the window on top
                 if (self.isVisible() and not self.isMinimized()
                         and QApplication.activeModalWidget() is None):
@@ -1750,6 +1784,39 @@ class QuickboxWindow(QMainWindow):
         self._right_layout.addStretch()
 
     # ── launch / stop ─────────────────────────────────────────────────────────────
+    def _launch_iso(self, iso):
+        """Boot an ISO in place (never copied); writes are discarded via live_mode."""
+        name = Path(iso).stem.replace(" ", "-")
+        conf_path = str(Path(self.vms_dir) / f"{name}.conf")
+        existing = read_vm_conf(conf_path) if Path(conf_path).exists() else None
+        if existing is not None and existing.get("live_mode") != "true":
+            # never take over a regular VM that happens to share the ISO's name
+            name += "-iso"
+            conf_path = str(Path(self.vms_dir) / f"{name}.conf")
+            existing = read_vm_conf(conf_path) if Path(conf_path).exists() else None
+        if existing is None:
+            Path(self.vms_dir).mkdir(parents=True, exist_ok=True)
+            Path(conf_path).write_text(
+                '#!/usr/bin/quickemu --vm\n'
+                'guest_os="linux"\n'
+                f'iso="{iso}"\n'
+                f'disk_img="{name}/disk.qcow2"\n'
+                'disk_size="8G"\n'
+                f'pretty="{name}"\n'
+                f'ssh_port="{get_next_ssh_port(self.vms_dir, name)}"\n'
+                'live_mode="true"\n')
+        elif existing.get("iso") != iso:
+            if is_running(name):
+                self._raise_window()
+                return
+            setconf("iso", f'"{iso}"', conf_path)
+        self._refresh()
+        vm = next((v for v in self.vms if v["_name"] == name), None)
+        if vm is None or vm.get("_running"):
+            self._raise_window()
+            return
+        self._launch_vm(vm)
+
     def _launch_vm(self, vm):
         vmname    = vm["_name"]
         vmdir     = str(Path(self.vms_dir) / vmname)
@@ -1771,6 +1838,8 @@ class QuickboxWindow(QMainWindow):
 
         display = vm.get("display", "sdl")
         cmd = ["quickemu", "--vm", conf_path, "--display", display]
+        if vm.get("live_mode") == "true":
+            cmd.append("--status-quo")
         log = f"/tmp/qemu-{vmname}.log"
         with open(log, "w") as logfile:
             proc = subprocess.Popen(cmd, cwd=self.vms_dir, stdout=logfile, stderr=logfile)
@@ -2961,6 +3030,8 @@ def main():
     app = QuickboxApp(sys.argv)
     win = QuickboxWindow()
     win.show()
+    if _iso_request:
+        QTimer.singleShot(0, lambda: win._launch_iso(_iso_request))
     sys.exit(app.exec())
 
 
