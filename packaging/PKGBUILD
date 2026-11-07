@@ -23,7 +23,7 @@ optdepends=(
 conflicts=('quickbox')
 provides=('quickbox')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('250cff086f7310caa3cd02dd8a0bceaea52a750ba072ed682ee5aa71f63c8963')
 
 package() {
     cd "$srcdir/$pkgname-$pkgver"
