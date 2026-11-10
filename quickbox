@@ -169,6 +169,10 @@ S = {
     "ntf_rsz_done": "Disk resized to {}GB",
     "warn_rsz_fail_t": "Resize failed",
     "warn_rsz_fail_b": "qemu-img resize returned an error.",
+    "dlg_small_t": "The disk may be too small",
+    "dlg_small_b": "The disk is {cur}GB. Installing this ISO needs about {need}GB.\nChoose the new size. The disk only uses the space that is written.",
+    "btn_grow": "Grow disk",
+    "btn_start_anyway": "Start anyway",
     "warn_launch_fail_t": "Launch failed",
     "warn_launch_fail_b": "QEMU exited with code {}.",
     "dng_del_disk": "Delete disk", "dng_fmt_disk": "Format disk",
@@ -295,6 +299,17 @@ def read_conf(filepath=None):
                 conf[k.strip()] = v.strip().strip('"')
     conf.setdefault("vms_dir", str(Path.home() / "emu"))
     return conf
+
+def iso_disk_need_gb(iso):
+    """GB an installer ISO needs on its disk (about 2x the ISO plus 16); None for ISOs under 8 GiB."""
+    try:
+        size = Path(iso).stat().st_size
+    except OSError:
+        return None
+    if size < 8 * 2**30:
+        return None
+    return -(-size // 2**30) * 2 + 16
+
 
 def setconf(key, value, filepath=None):
     fp = Path(filepath) if filepath else CONFIG_FILE
@@ -1801,7 +1816,7 @@ class QuickboxWindow(QMainWindow):
                 'guest_os="linux"\n'
                 f'iso="{iso}"\n'
                 f'disk_img="{name}/disk.qcow2"\n'
-                'disk_size="8G"\n'
+                'disk_size="32G"\n'
                 f'pretty="{name}"\n'
                 f'ssh_port="{get_next_ssh_port(self.vms_dir, name)}"\n'
                 'live_mode="true"\n')
@@ -1817,6 +1832,64 @@ class QuickboxWindow(QMainWindow):
             return
         self._launch_vm(vm)
 
+    def _disk_big_enough(self, vm, disk_path):
+        """Warn when a large installer ISO has a smaller disk; False means do not start."""
+        iso = Path(vm["iso"])
+        if not iso.is_absolute():
+            iso = Path(self.vms_dir) / iso
+        need = iso_disk_need_gb(iso)
+        try:
+            cur = int(vm.get("disk_size", "32G").rstrip("G"))
+            if disk_path and Path(disk_path).exists():
+                r = subprocess.run(["qemu-img", "info", "--output=json", disk_path],
+                                   capture_output=True, text=True)
+                cur = max(1, _json.loads(r.stdout).get("virtual-size", 0) // 1024 ** 3)
+        except (ValueError, OSError):
+            return True
+        if need is None or cur >= need:
+            return True
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Quickbox")
+        dlg.setWindowIcon(QIcon.fromTheme("quickbox"))
+        v = QVBoxLayout(dlg)
+        head = QLabel(S["dlg_small_t"])
+        head.setFont(QFont(head.font().family(), head.font().pointSize() + 2, QFont.Weight.Bold))
+        v.addWidget(head)
+        v.addWidget(QLabel(S["dlg_small_b"].format(cur=cur, need=need)))
+        spin = QSpinBox()
+        spin.setRange(cur + 1, 4096)
+        spin.setSuffix(" GB")
+        spin.setValue(need)
+        v.addWidget(spin)
+        btns = QDialogButtonBox()
+        btns.addButton(S["btn_grow"], QDialogButtonBox.ButtonRole.AcceptRole)
+        anyway = btns.addButton(S["btn_start_anyway"], QDialogButtonBox.ButtonRole.ActionRole)
+        btns.addButton(QDialogButtonBox.StandardButton.Cancel)
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        anyway.clicked.connect(lambda: dlg.done(2))
+        v.addWidget(btns)
+        res = dlg.exec()
+        if res == 2:
+            return True
+        if res != QDialog.DialogCode.Accepted:
+            return False
+        need = spin.value()
+        if disk_path and Path(disk_path).exists():
+            try:
+                r = subprocess.run(["qemu-img", "resize", disk_path, f"{need}G"],
+                                   capture_output=True, text=True)
+                err = r.stderr.strip() if r.returncode != 0 else ""
+            except OSError as e:
+                err = str(e)
+            if err:
+                self._warn(S["warn_rsz_fail_t"], f'{S["warn_rsz_fail_b"]}\n\n{err}')
+                return False
+            notify("quickbox", S["ntf_rsz_done"].format(need))
+        setconf("disk_size", f"{need}G", vm["_conf"])
+        vm["disk_size"] = f"{need}G"
+        return True
+
     def _launch_vm(self, vm):
         vmname    = vm["_name"]
         vmdir     = str(Path(self.vms_dir) / vmname)
@@ -1829,10 +1902,15 @@ class QuickboxWindow(QMainWindow):
 
         disk_img  = vm.get("disk_img", "")
         disk_path = str(Path(self.vms_dir) / disk_img) if disk_img else ""
+        first_start = vm.get("live_mode") == "true" or not (disk_path and Path(disk_path).exists())
+        if vm.get("iso") and first_start and not self._disk_big_enough(vm, disk_path):
+            return
         if disk_path and not Path(disk_path).exists():
             Path(vmdir).mkdir(parents=True, exist_ok=True)
             disk_size = vm.get("disk_size", "32G")
             subprocess.run(["qemu-img", "create", "-f", "qcow2", disk_path, disk_size])
+            if "disk_size" not in vm:
+                setconf("disk_size", f'"{disk_size}"', conf_path)
 
         accel = "kvm" if KVM_AVAILABLE else "tcg"
 
